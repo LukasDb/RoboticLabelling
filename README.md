@@ -1,6 +1,11 @@
 # Robotic Labelling for Computer Vision Datasets
 This repository contains our application to generate labelled datasets, intended for 6D pose estimation. While we try to create as large datasets as possible, the intended purpose is to create validition/testing datasets and NOT training datasets. Sampling data from these datasets is considered as defeating the purpose, since the data in these datasets is correlated. Scene share the same poses of labelled objects. Multiple Scenes are still captured in the same general environment and may probably share background images and distractors.
 
+## Requirements
+- Python 3.10
+- `pip install -r requirements.txt`
+- start with `bash run_app.sh` or `streamlit run main.py`
+
 ## Semantics and general info
 - *Objects* are things, with annotations and therefore 3D scanned or modelled digital twins.
 - *Distractors* are things without annotations, e.g. random things, placed in the scene as clutter
