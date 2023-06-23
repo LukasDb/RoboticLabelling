@@ -1,8 +1,9 @@
-from typing import Dict, List, TYPE_CHECKING
+from typing import List
 
 from model.labelled_object import Labelledobject
 from model.robot import Robot
 from model.camera.camera import Camera
+from model.background_monitor import BackgroundMonitor
 
 
 class Scene:
@@ -10,7 +11,7 @@ class Scene:
         self.objects: List[Labelledobject] = []
         self.robots: List[Robot] = []
         self.cameras: List[Camera] = []
-        # TODO self.background = BackgroundMonitor()
+        self.background = BackgroundMonitor()
         # TODO self.ligthing = LightController()
 
     def add_camera(self, camera: Camera):

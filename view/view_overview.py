@@ -27,12 +27,29 @@ class Overview(tk.Frame):
         self.title = ttk.Label(self, text="Overview")
 
         self.robot_check = self.robot_check_widget()
+        self.bg_setup = self.background_setup_widget()
 
         self.manual = tk.Label(self, text=manual_text)
 
         self.title.grid()
         self.robot_check.grid()
+        self.bg_setup.grid()
         self.manual.grid()
+
+    def background_setup_widget(self):
+        # add button with a label to "Setup up background monitor"
+        self.bg_frame = ttk.Frame(self)
+        self.btn_setup_bg = ttk.Button(
+            self.bg_frame,
+            text="Setup Background Monitor",
+            command=self.scene.background.setup_window,
+        )
+        self.bg_label = ttk.Label(self.bg_frame, text="Setup Background Monitor")
+
+        self.btn_setup_bg.grid(row=0, column=0, padx=5)
+        self.bg_label.grid(row=0, column=1, padx=5)
+
+        return self.bg_frame
 
     def robot_check_widget(self):
         self.robot_frame = ttk.Frame(self)
