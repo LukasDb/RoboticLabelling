@@ -4,9 +4,11 @@ import cv2
 from typing import List
 from model.scene import Scene
 from model.camera.camera import Camera
+from lib.geometry import *
 import cv2
 from tqdm import tqdm
 from cv2 import aruco
+from scipy import optimize
 
 
 class CameraCalibrator:
@@ -36,14 +38,13 @@ class CameraCalibrator:
         # TODO actually capture image from camera
         # TODO choose the correct robot
 
-        mock_cam = "realsense_121622061798"
-        # mock_cam = "realsense_f1120593"
+        # mock_cam = "realsense_121622061798"
+        mock_cam = "realsense_f1120593"
         from pathlib import Path
 
-        for img_path, pose_path in zip(
-            Path(f"demo_data/images/{mock_cam}").glob("*.png"),
-            Path(f"demo_data/poses/{mock_cam}").glob("*.txt"),
-        ):
+        for img_path in Path(f"demo_data/images/{mock_cam}").glob("*.png"):
+            index = int(img_path.stem)
+            pose_path = Path(f"demo_data/poses/{mock_cam}/{index}.txt")
             img = cv2.imread(str(img_path))
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             pose = np.loadtxt(str(pose_path))
@@ -133,16 +134,16 @@ class CameraCalibrator:
             + cv2.CALIB_FIX_ASPECT_RATIO
         )
         # flags = (cv2.CALIB_RATIONAL_MODEL)
-        print("Calibrating...")
+        print("Calibrating intrinsics...")
         (
             ret,
             camera_matrix,
             dist_coeffs,
             rvecs,
             tvecs,
-            stdDeviationsIntrinsics,
-            stdDeviationsExtrinsics,
-            perViewErrors,
+            _,
+            _,
+            _,
         ) = cv2.aruco.calibrateCameraCharucoExtended(
             charucoCorners=allCorners,
             charucoIds=allIds,
@@ -164,6 +165,25 @@ class CameraCalibrator:
                     0.3,
                 )
         print("Done")
+        print("Intrensic Camera Matrix:\n", camera_matrix)
+
+        print("Calibrating extrinsics...")
+        camera_poses = [
+            np.concatenate([tvec, rvec], axis=0)[:, 0]
+            for tvec, rvec in zip(tvecs, rvecs)
+        ]
+        ret = self._optimize_handeye_matrix(camera_poses, self.captured_robot_poses)
+
+        x = ret["x"][:6]
+        extrinsic_matrix = invert_homogeneous(
+            get_affine_matrix_from_6d_vector("xyz", x)
+        )
+
+        print("Done")
+        print("Optimality", ret["optimality"])
+        print("Cost: ", ret["cost"])
+        print("Extrinsic Camera Matrix:\n", extrinsic_matrix)
+
         # TODO save calibration
 
     def get_live_img(self) -> np.ndarray:
@@ -236,3 +256,42 @@ class CameraCalibrator:
             f"Confirm the dimensions of the chessboard in the image: {chessboardSize}"
         )
         print(f"Confirm the dimensions of the markers in the image: {markerSize}")
+
+    def _optimize_handeye_matrix(self, camera_poses, robot_poses):
+        camera2tool_t = np.zeros((6,))
+        camera2tool_t[5] = np.pi  # initialize with 180° around z
+        marker2wc_t = np.zeros((6,))
+        marker2camera_t = [
+            invert_homogeneous(get_affine_matrix_from_6d_vector("Rodriguez", x))
+            for x in camera_poses
+        ]
+
+        tool2wc_t = [
+            invert_homogeneous(x) for x in robot_poses  # already homogeneous matrix
+        ]
+
+        x0 = np.array([camera2tool_t, marker2wc_t]).reshape(12)
+
+        def residual(x, tool2wc=None, marker2camera=None):
+            camera2tool = get_affine_matrix_from_6d_vector("xyz", x[:6])
+            marker2wc = get_affine_matrix_from_6d_vector("xyz", x[6:])
+            return res_func(marker2camera, tool2wc, camera2tool, marker2wc)
+
+        def res_func(marker2camera, tool2wc, camera2tool, marker2wc):
+            res = []
+            for i in range(len(marker2camera)):
+                res += single_res_func(
+                    marker2camera[i], tool2wc[i], camera2tool, marker2wc
+                )
+            return np.array(res).reshape(16 * len(marker2camera))
+
+        def single_res_func(marker2camera, tool2wc, camera2tool, marker2wc):
+            res_array = marker2camera @ camera2tool @ tool2wc - marker2wc
+            return [res_array.reshape((16,))]
+
+        ret = optimize.least_squares(
+            residual,
+            x0,
+            kwargs={"marker2camera": marker2camera_t, "tool2wc": tool2wc_t},
+        )
+        return ret
