@@ -7,32 +7,34 @@ class Entity:
 
     def __init__(self, name: str):
         self.name = name
-        self._position = np.zeros((3,))
-        self._orientation = R.from_quat([0, 0, 0, 1])
-        self.parent: Entity = None
-        self.link_matrix: np.ndarray = None
+        self._pose = np.eye(4)  # global world 2 entity pose
+        self._parent: Entity = None
+        self._link_matrix: np.ndarray = None
 
     def set_position(self, position: np.ndarray):
-        self._position = position
+        self.pose[:3, 3] = position
 
     def set_orientation(self, orientation: R):
-        self._orientation = orientation
+        self.pose[:3, :3] = orientation.as_matrix()
 
     def get_position(self) -> np.ndarray:
-        return self._position
+        return self.pose[:3, 3]
 
     def get_orientation(self) -> R:
-        return self._orientation
+        return R.from_matrix(self.pose[:3, :3])
 
-    def get_transform(self) -> np.ndarray:
-        # return 4x4 transformation matrix
-        return np.block(
-            [
-                [self.get_orientation().as_matrix(), self.get_position()[:, None]],
-                [np.zeros((1, 3)), 1],
-            ]
-        )
+    @property
+    def pose(self) -> np.ndarray:
+        if self._parent is None:
+            return self._pose
+        else:
+            return self._parent.pose @ self._link_matrix
+
+    @pose.setter
+    def pose(self, pose: np.ndarray):
+        self._pose = pose
 
     def attach(self, parent: "Entity", link_matrix: np.ndarray):
-        self.parent = parent
-        self.link_matrix = link_matrix
+        self._parent = parent
+        self._link_matrix = link_matrix
+        self._pose = self._parent.pose @ self._link_matrix
