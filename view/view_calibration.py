@@ -4,6 +4,7 @@ from PIL import ImageTk, Image
 from model.scene import Scene
 from control.camera_calibration import CameraCalibrator
 import numpy as np
+import cv2
 
 
 class ViewCalibration(ttk.Frame):
@@ -22,14 +23,23 @@ class ViewCalibration(ttk.Frame):
         self.control_frame.grid(row=1, column=1, sticky=tk.N)
         self.preview_frame.grid(row=1, column=0)
 
-        self.calibrator = CameraCalibrator(self.scene)
+        self.calibrator = CameraCalibrator(self.scene, None)
 
         self.setup_controls()
         self.setup_previews()
 
     def setup_controls(self):
+        self.btn_setup = ttk.Button(
+            self.control_frame,
+            text="Setup",
+            command=self.calibrator.setup,
+        )
+
         self.camera_selection = ttk.Combobox(
             self.control_frame, values=[c.name for c in self.scene.cameras]
+        )
+        self.camera_selection.bind(
+            "<<ComboboxSelected>>", self.calibrator.select_camera
         )
 
         self.capture_button = ttk.Button(
@@ -53,11 +63,12 @@ class ViewCalibration(ttk.Frame):
             command=self.calibrator.calibrate,
         )
 
-        self.camera_selection.grid(row=0)
-        self.capture_button.grid(row=1)
-        self.clear_button.grid(row=2)
-        self.image_selection.grid(row=3)
-        self.calibrate_button.grid(row=4)
+        self.btn_setup.grid(row=0)
+        self.camera_selection.grid(row=1)
+        self.capture_button.grid(row=2)
+        self.clear_button.grid(row=3)
+        self.image_selection.grid(row=4)
+        self.calibrate_button.grid(row=5)
 
     def setup_previews(self):
         self.live_canvas = tk.Canvas(
@@ -83,6 +94,7 @@ class ViewCalibration(ttk.Frame):
         selected_index = int(selected.split(" ")[-1])
 
         img = self.calibrator.get_selected_img(selected_index)
+        img = cv2.resize(img, (self.PREVIEW_WIDTH, self.PREVIEW_HEIGHT))
 
         if img is not None:
             self.sel_img_tk = ImageTk.PhotoImage(image=Image.fromarray(img))

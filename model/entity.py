@@ -8,7 +8,7 @@ class Entity:
     def __init__(self, name: str):
         self.name = name
         self._pose = np.eye(4)  # global world 2 entity pose
-        self._parent: Entity = None
+        self.parent: Entity = None
         self._link_matrix: np.ndarray = None
 
     def set_position(self, position: np.ndarray):
@@ -25,16 +25,16 @@ class Entity:
 
     @property
     def pose(self) -> np.ndarray:
-        if self._parent is None:
+        if self.parent is None:
             return self._pose
         else:
-            return self._parent.pose @ self._link_matrix
+            return self.parent.pose @ self._link_matrix
 
     @pose.setter
     def pose(self, pose: np.ndarray):
         self._pose = pose
 
     def attach(self, parent: "Entity", link_matrix: np.ndarray):
-        self._parent = parent
+        self.parent = parent
         self._link_matrix = link_matrix
-        self._pose = self._parent.pose @ self._link_matrix
+        self._pose = self.parent.pose @ self._link_matrix
