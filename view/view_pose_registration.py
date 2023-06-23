@@ -1,12 +1,12 @@
 import streamlit as st
-from model.state import State
+from model.scene import Scene
 from control.pose_registrator import PoseRegistrator
 from scipy.spatial.transform import Rotation as R
 
 
 class ViewPoseRegistration:
-    def __init__(self, state: State) -> None:
-        self._state = state
+    def __init__(self, scene: Scene) -> None:
+        self.scene = scene
         st.title("2. Pose Registration")
         c1, c2 = st.columns(2)
 

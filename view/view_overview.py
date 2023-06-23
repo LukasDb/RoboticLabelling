@@ -1,5 +1,5 @@
 import streamlit as st
-from model.state import State
+from model.scene import Scene
 
 manual_text = """
 1. Calibrate all cameras.
@@ -16,10 +16,10 @@ manual_text = """
 """
         
 class Overview:
-    def __init__(self, state: State) -> None:
+    def __init__(self, scene: Scene) -> None:
         # TODO semantics editor: create an object, by selecting a mesh and a label
         # TODO show available cameras
-        self._state = state
+        self.scene = scene
         st.title("Overview")
         st.info("here you can see a table with semantics: [obj_name, label, mesh]")
         st.info("a list of available cameras (for debugging)")

@@ -15,8 +15,6 @@ class PoseRegistrator(ImageCache):
         if "register_pos" not in st.session_state:
             self.reset()
 
-        # self._position = st.session_state.register_pos
-        # self._orientation = st.session_state.register_rot
         pass
 
     def capture_image(self):
@@ -52,17 +50,18 @@ class PoseRegistrator(ImageCache):
         st.session_state.register_rot = R.from_quat([0, 0, 0, 1])
 
     def optimize_pose(self):
+        # TODO optimize pose in each image using ICP
         # TODO optimize object pose over all images
         # TODO inform user about optimization result
         # TODO save optimized pose to the scene
         pass
 
     def get_live_img(self):
-        # TODO draw object at current pose on image
+        # TODO draw object at globally optimized pose on image
         return np.random.uniform(size=(480, 640, 3), high=255).astype(np.uint8)
 
     def get_selected_img(self, index):
-        # TODO draw object at current pose on image
+        # TODO draw object pose on image (for each ICP optimized pose)
         if index is None:
             return None
         return self._captured_images[index]

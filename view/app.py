@@ -1,5 +1,5 @@
 import streamlit as st
-from model.state import State
+from model.scene import Scene
 from .view_overview import Overview
 from .view_calibration import ViewCalibration
 from .view_pose_registration import ViewPoseRegistration
@@ -14,7 +14,10 @@ class App:
 
     def __init__(self) -> None:
         st.set_page_config(layout="wide")
-        self._state = State()
+
+        self.scene = Scene()
+        # add cameras, robots and link to scene
+
         if "tab" not in st.session_state:
             st.session_state.tab = self.OVERVIEW
 
@@ -30,10 +33,10 @@ class App:
             st.session_state.tab = self.ACQUISITION
 
         if st.session_state.tab == self.OVERVIEW:
-            Overview(self._state)
+            Overview(self.scene)
         elif st.session_state.tab == self.CAMERA_CALIBRATION:
-            ViewCalibration(self._state)
+            ViewCalibration(self.scene)
         elif st.session_state.tab == self.POSE_REGISTRATION:
-            ViewPoseRegistration(self._state)
+            ViewPoseRegistration(self.scene)
         elif st.session_state.tab == self.ACQUISITION:
-            ViewAcquisition(self._state)
+            ViewAcquisition(self.scene)

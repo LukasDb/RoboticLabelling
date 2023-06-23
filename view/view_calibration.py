@@ -1,12 +1,12 @@
 import streamlit as st
-from model.state import State
+from model.scene import Scene
 from control.camera_calibration import CameraCalibrator
 import numpy as np
 
 
 class ViewCalibration:
-    def __init__(self, state: State) -> None:
-        self._state = state
+    def __init__(self, scene: Scene) -> None:
+        self.scene = scene
         st.title("1. Camera Calibration")
         c1, c2 = st.columns(2)
 

@@ -8,6 +8,8 @@ class Entity:
     def __init__(self):
         self._position = np.zeros((3,))
         self._orientation = R.from_quat([0, 0, 0, 1])
+        self.parent: Entity = None
+        self.link_matrix: np.ndarray = None
 
     def set_position(self, position: np.ndarray):
         self._position = position
@@ -15,7 +17,7 @@ class Entity:
     def set_orientation(self, orientation: R):
         self._orientation = orientation
 
-    def get_transform(self)->np.ndarray:
+    def get_transform(self) -> np.ndarray:
         # return 4x4 transformation matrix
         return np.block(
             [
@@ -23,3 +25,7 @@ class Entity:
                 [np.zeros((1, 3)), 1],
             ]
         )
+
+    def attach(self, parent: "Entity", link_matrix: np.ndarray):
+        self.parent = parent
+        self.link_matrix = link_matrix
