@@ -1,42 +1,86 @@
-import streamlit as st
+import tkinter as tk
+from tkinter import ttk
+from PIL import ImageTk, Image
 from model.scene import Scene
 from control.camera_calibration import CameraCalibrator
 import numpy as np
 
 
-class ViewCalibration:
-    def __init__(self, scene: Scene) -> None:
+class ViewCalibration(tk.Frame):
+    PREVIEW_WIDTH = 640
+    PREVIEW_HEIGHT = 480
+
+    def __init__(self, parent, scene: Scene) -> None:
+        tk.Frame.__init__(self, parent)
         self.scene = scene
-        st.title("1. Camera Calibration")
-        c1, c2 = st.columns(2)
 
-        selected_camera = c2.selectbox("Select Camera", ["Camera 1", "Camera 2"])
-        calibrator = CameraCalibrator(selected_camera)
-
-        img_control = c2.columns(2)
-        if img_control[0].button("Capture Image"):
-            calibrator.capture_image()
-        if img_control[1].button("Delete Captured Images"):
-            calibrator.clear_cache()
-
-        sel_img_index = c2.radio(
-            "Captured Images",
-            list(range(len(calibrator._captured_images))),
-            format_func=lambda x: f"Image {x:2}",
+        self.title = ttk.Label(self, text="1. Camera Calibration")
+        self.title.grid(
+            row=0,
+            column=0,
         )
 
-        if c2.button("Calibrate Intrinsics & Hand-Eye"):
-            calibrator.calibrate()
+        self.calibrator = calibrator = CameraCalibrator(self.scene)
 
-        live = calibrator.get_live_img()
-        sel_img = calibrator.get_selected_img(sel_img_index)
-
-        c1.image(
-            live,
-            caption="Live preview",
+        self.camera_selection = ttk.Combobox(
+            self, values=[c.name for c in self.scene.cameras]
         )
-        if sel_img is not None:
-            c1.image(
-                sel_img,
-                caption="Selected Image",
+        self.camera_selection.grid(row=1, column=1)
+
+        self.capture_button = ttk.Button(
+            self, text="Capture Image", command=self.on_capture
+        )
+        self.capture_button.grid(row=2, column=1)
+
+        self.clear_button = ttk.Button(
+            self,
+            text="Delete Captured Images",
+            command=calibrator.captured_images.clear,
+        )
+        self.clear_button.grid(row=3, column=1)
+
+        self.image_selection = ttk.Combobox(self)
+        self.image_selection.grid(row=3, column=1)
+        self.image_selection.bind(
+            "<<ComboboxSelected>>", lambda _: self.update_selected_image_preview()
+        )
+
+        self.calibrate_button = ttk.Button(
+            self, text="Calibrate Intrinsics & Hand-Eye", command=calibrator.calibrate
+        )
+        self.calibrate_button.grid(row=4, column=1)
+
+
+        self.live_canvas = tk.Canvas(self, width=self.PREVIEW_WIDTH, height=self.PREVIEW_HEIGHT)
+        self.live_img_tk = ImageTk.PhotoImage(image=Image.fromarray(calibrator.get_live_img()))
+        self.live_canvas.create_image(0,0, anchor=tk.NW, image=self.live_img_tk)
+        self.live_canvas.grid(row=1, column=0)
+
+
+        self.selected_image_canvas = tk.Canvas(self, width=self.PREVIEW_WIDTH, height=self.PREVIEW_HEIGHT)
+        self.selected_image_container = self.selected_image_canvas.create_image(
+            0, 0, anchor=tk.NW
+        )
+        self.selected_image_canvas.grid(row=2, column=0)
+
+    def update_selected_image_preview(self):
+        selected = self.image_selection.get()
+        selected_index = int(selected.split(" ")[-1])
+
+        img = self.calibrator.get_selected_img(selected_index)
+
+        if img is not None:
+            self.sel_img_tk = ImageTk.PhotoImage(image=Image.fromarray(img))
+            self.selected_image_canvas.itemconfig(
+                self.selected_image_container, image=self.sel_img_tk
             )
+
+    def on_capture(self):
+        self.calibrator.capture_image()
+        self.image_selection["values"] = [
+            f"Image {i:2}" for i in range(len(self.calibrator.captured_images))
+        ]
+        self.image_selection.set(len(self.calibrator.captured_images) - 1)
+
+        self.update_selected_image_preview()
+        

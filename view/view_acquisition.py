@@ -1,9 +1,12 @@
+import tkinter as tk
+from tkinter import ttk
 from model.scene import Scene
-import streamlit as st
 
 
-class ViewAcquisition:
-    def __init__(self, scene: Scene) -> None:
+class ViewAcquisition(tk.Frame):
+    def __init__(self, parent, scene: Scene) -> None:
+        tk.Frame.__init__(self, parent)
         self.scene = scene
 
-        st.title("3. Acquisition")
+        self.title = ttk.Label(self, text="3. Acquisition")
+        self.title.grid()

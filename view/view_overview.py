@@ -1,4 +1,5 @@
-import streamlit as st
+import tkinter as tk
+from tkinter import ttk
 from model.scene import Scene
 
 manual_text = """
@@ -14,15 +15,19 @@ manual_text = """
     
 3. Acquire the Dataset.
 """
-        
-class Overview:
-    def __init__(self, scene: Scene) -> None:
+
+
+class Overview(tk.Frame):
+    def __init__(self, parent, scene: Scene) -> None:
         # TODO semantics editor: create an object, by selecting a mesh and a label
         # TODO show available cameras
+        tk.Frame.__init__(self, parent)
         self.scene = scene
-        st.title("Overview")
-        st.info("here you can see a table with semantics: [obj_name, label, mesh]")
-        st.info("a list of available cameras (for debugging)")
 
-        st.subheader("Quick Manual")
-        st.text(manual_text)
+        self.title = ttk.Label(self, text="Overview")
+        self.title.grid()
+
+        self.manual = tk.Label(self, text=manual_text)
+        self.manual.grid()
+
+        return

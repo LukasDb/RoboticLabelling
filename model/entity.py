@@ -5,7 +5,8 @@ from scipy.spatial.transform import Rotation as R
 class Entity:
     """An entity is an object in the world that has a position and orientation"""
 
-    def __init__(self):
+    def __init__(self, name: str = None):
+        self.name = name
         self._position = np.zeros((3,))
         self._orientation = R.from_quat([0, 0, 0, 1])
         self.parent: Entity = None

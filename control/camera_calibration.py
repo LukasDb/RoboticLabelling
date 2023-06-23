@@ -1,13 +1,13 @@
 import numpy as np
 import streamlit as st
 import cv2
-from .image_cache import ImageCache
 
 
-class CameraCalibrator(ImageCache):
+class CameraCalibrator:
     def __init__(self, selected_camera):
         # needs to be persistent (which is not the case here)
-        ImageCache.__init__(self)
+        super().__init__()
+        self.captured_images = []
 
     def setup(self):
         # TODO
@@ -22,7 +22,7 @@ class CameraCalibrator(ImageCache):
         mock_img = np.random.uniform(size=(480, 640, 3), high=255).astype(np.uint8)
         cv2.putText(
             mock_img,
-            f"Captured Image {len(self._captured_images)}",
+            f"Captured Image {len(self.captured_images)}",
             (100, 100),
             cv2.FONT_HERSHEY_SIMPLEX,
             1,
@@ -30,7 +30,7 @@ class CameraCalibrator(ImageCache):
             2,
             cv2.LINE_AA,
         )
-        self._captured_images.append(mock_img)
+        self.captured_images.append(mock_img)
 
     def calibrate(self):
         # TODO use robot poses and captured images to calibrate camera intrinsics and hand-eye
@@ -50,4 +50,4 @@ class CameraCalibrator(ImageCache):
         if index is None:
             return None
         # project cv2 charuco board detection and estimated pose on image
-        return self._captured_images[index]
+        return self.captured_images[index]

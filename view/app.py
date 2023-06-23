@@ -1,4 +1,5 @@
-import streamlit as st
+import tkinter as tk
+from tkinter import ttk
 from model.scene import Scene
 from .view_overview import Overview
 from .view_calibration import ViewCalibration
@@ -13,16 +14,33 @@ class App:
     ACQUISITION = "acquisition"
 
     def __init__(self) -> None:
-        st.set_page_config(layout="wide")
+        self.root = tk.Tk()
+        self.root.title("Robotic Labelling")
 
         self.scene = Scene()
         # add cameras, robots and link to scene
 
-        if "tab" not in st.session_state:
-            st.session_state.tab = self.OVERVIEW
-
     def run(self):
-        c1, c2, c3, c4 = st.columns(4)
+        # c1, c2, c3, c4 = st.columns(4)
+
+        tabs = ttk.Notebook(self.root)
+        tabs.pack(expand=True, fill=tk.BOTH)
+
+        ov = Overview(tabs, self.scene)
+        tabs.add(ov, text="Overview")
+
+        cal = ViewCalibration(tabs, self.scene)
+        tabs.add(cal, text="1. Camera Calibration")
+
+        reg = ViewPoseRegistration(tabs, self.scene)
+        tabs.add(reg, text="2. Pose Registration")
+
+        acq = ViewAcquisition(tabs, self.scene)
+        tabs.add(acq, text="3. Acquisition")
+
+        self.root.mainloop()
+        return
+
         if c1.button("Overview", use_container_width=True):
             st.session_state.tab = self.OVERVIEW
         if c2.button("1\. Camera Calibration", use_container_width=True):

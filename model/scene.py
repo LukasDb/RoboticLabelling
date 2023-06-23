@@ -3,7 +3,7 @@ from typing import Dict, List, TYPE_CHECKING
 if TYPE_CHECKING:
     from model.labelled_object import Labelledobject
     from model.robot import Robot
-    from model.camera import Camera
+    from model.camera.camera import Camera
 
 
 class Scene:
