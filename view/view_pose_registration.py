@@ -5,7 +5,7 @@ from control.pose_registrator import PoseRegistrator
 from scipy.spatial.transform import Rotation as R
 
 
-class ViewPoseRegistration(tk.Frame):
+class ViewPoseRegistration(ttk.Frame):
     def __init__(self, parent, scene: Scene) -> None:
         super().__init__(parent)
         self.scene = scene
@@ -45,7 +45,6 @@ class ViewPoseRegistration(tk.Frame):
 
         self.selected_image = tk.Label(self)
         self.selected_image.grid()
-
 
         # st.title("2. Pose Registration")
         # c1, c2 = st.columns(2)

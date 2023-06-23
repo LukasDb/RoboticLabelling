@@ -4,8 +4,8 @@ from abc import ABC, abstractmethod
 
 
 class Robot(Entity, ABC):
-    def __init__(self):
-        Entity.__init__(self)
+    def __init__(self, name: str):
+        Entity.__init__(self, name)
         self.is_online = False
 
     @abstractmethod
@@ -26,11 +26,6 @@ class Robot(Entity, ABC):
     @abstractmethod
     def move_to_joint(self, joint: np.ndarray, block=True):
         """move to a joint"""
-        pass
-
-    @abstractmethod
-    def get_pose(self) -> np.ndarray:
-        """get current pose"""
         pass
 
     @abstractmethod

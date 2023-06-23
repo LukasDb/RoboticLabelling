@@ -18,6 +18,6 @@ class CamFrame:
 
 
 class Camera(Entity, ABC):
-    def __init__(self):
-        Entity.__init__(self)
-        # robot flange to camera transformation
+    def __init__(self, name: str):
+        Entity.__init__(self, name)
+

@@ -1,6 +1,12 @@
 import tkinter as tk
 from tkinter import ttk
 from model.scene import Scene
+import numpy as np
+
+from model.fanuc_crx10ial import FanucCRX10iAL
+from model.camera.rs_d415 import RealsenseD415
+
+
 from .view_overview import Overview
 from .view_calibration import ViewCalibration
 from .view_pose_registration import ViewPoseRegistration
@@ -18,13 +24,17 @@ class App:
         self.root.title("Robotic Labelling")
 
         self.scene = Scene()
-        # add cameras, robots and link to scene
+
+        crx = FanucCRX10iAL()
+        cam = RealsenseD415()
+        cam.attach(crx, np.eye(4))  # TODO load from disk?
+        self.scene.add_robot(crx)
+        self.scene.add_camera(cam)
 
     def run(self):
-        # c1, c2, c3, c4 = st.columns(4)
-
+        print("Running...")
         tabs = ttk.Notebook(self.root)
-        tabs.pack(expand=True, fill=tk.BOTH)
+        tabs.grid(padx=10, pady=10, sticky="NESW")
 
         ov = Overview(tabs, self.scene)
         tabs.add(ov, text="Overview")
@@ -38,23 +48,4 @@ class App:
         acq = ViewAcquisition(tabs, self.scene)
         tabs.add(acq, text="3. Acquisition")
 
-        self.root.mainloop()
-        return
-
-        if c1.button("Overview", use_container_width=True):
-            st.session_state.tab = self.OVERVIEW
-        if c2.button("1\. Camera Calibration", use_container_width=True):
-            st.session_state.tab = self.CAMERA_CALIBRATION
-        if c3.button("2\. Pose Registration", use_container_width=True):
-            st.session_state.tab = self.POSE_REGISTRATION
-        if c4.button("3\. Acquisition", use_container_width=True):
-            st.session_state.tab = self.ACQUISITION
-
-        if st.session_state.tab == self.OVERVIEW:
-            Overview(self.scene)
-        elif st.session_state.tab == self.CAMERA_CALIBRATION:
-            ViewCalibration(self.scene)
-        elif st.session_state.tab == self.POSE_REGISTRATION:
-            ViewPoseRegistration(self.scene)
-        elif st.session_state.tab == self.ACQUISITION:
-            ViewAcquisition(self.scene)
+        tk.mainloop()

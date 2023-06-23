@@ -25,9 +25,30 @@ class Overview(tk.Frame):
         self.scene = scene
 
         self.title = ttk.Label(self, text="Overview")
-        self.title.grid()
+
+        self.robot_check = self.robot_check_widget()
 
         self.manual = tk.Label(self, text=manual_text)
+
+        self.title.grid()
+        self.robot_check.grid()
         self.manual.grid()
 
-        return
+    def robot_check_widget(self):
+        self.robot_frame = ttk.Frame(self)
+        self.btn_update_robot = ttk.Button(
+            self.robot_frame, text="Update Robot", command=self.update_robot
+        )
+        self.pose_label = ttk.Label(self.robot_frame, text="Pose: ")
+
+        self.btn_update_robot.grid(row=0, column=0, padx=5)
+        self.pose_label.grid(row=0, column=1, padx=5)
+
+        return self.robot_frame
+
+    def update_robot(self):
+        robot = self.scene.robots[0]
+        position = robot.get_position()
+        orientation = robot.get_orientation().as_euler("xyz", degrees=True)
+        # update pose label
+        self.pose_label["text"] = f"Pose: {position}, {orientation}"

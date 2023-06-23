@@ -1,9 +1,8 @@
 from typing import Dict, List, TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from model.labelled_object import Labelledobject
-    from model.robot import Robot
-    from model.camera.camera import Camera
+from model.labelled_object import Labelledobject
+from model.robot import Robot
+from model.camera.camera import Camera
 
 
 class Scene:
@@ -13,3 +12,14 @@ class Scene:
         self.cameras: List[Camera] = []
         # TODO self.background = BackgroundMonitor()
         # TODO self.ligthing = LightController()
+
+    def add_camera(self, camera: Camera):
+        self.cameras.append(camera)
+
+    def add_robot(self, robot: Robot):
+        self.robots.append(robot)
+
+    def add_object(self, obj: Labelledobject):
+        self.objects.append(obj)
+
+
