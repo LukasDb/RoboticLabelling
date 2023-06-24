@@ -1,4 +1,6 @@
+import pickle
 import numpy as np
+from pathlib import Path
 import streamlit as st
 import cv2
 from typing import List
@@ -12,23 +14,44 @@ from scipy import optimize
 
 
 class CameraCalibrator:
-    CHESSBOARD_SIZE = 0.0286 # better 0.05 or bigger
-    MARKER_SIZE = 0.023 
-    MARKERS = (7,5)
+    CHESSBOARD_SIZE = 0.0286  # better 0.05 or bigger
+    MARKER_SIZE = 0.023
+    MARKERS = (7, 5)
     CHARUCO_DICT = aruco.DICT_6X6_250
 
-    def __init__(self, scene: Scene, selected_camera):
+    def __init__(self, scene: Scene):
         # needs to be persistent (which is not the case here)
         super().__init__()
         self._scene = scene
         self.captured_images: List[np.ndarray] = []
         self.captured_robot_poses: List[np.ndarray] = []
-        self.selected_camera: Camera = None
+        last_cam = list(self._scene.cameras.values())[-1]
+        self.selected_camera: Camera = last_cam
         self.aruco_dict = None
         self.charuco_board = None
         self.markers2monitor = np.eye(4)
 
         self.mock_i = 0
+
+    def load(self, path):
+        with Path(path).open("rb") as f:
+            cal_data = pickle.load(f)
+        for k, c in self._scene.cameras.items():
+            c.intrinsic_matrix = cal_data[k]["intrinsic"]
+            c.dist_coeffs = cal_data[k]["dist_coeffs"]
+            c.extrinsic_matrix = cal_data[k]["extrinsic"]
+
+    def save(self, path):
+        cal_data = {
+            k: {
+                "intrinsic": c.intrinsic_matrix,
+                "dist_coeffs": c.dist_coeffs,
+                "extrinsic": c._link_matrix,
+            }
+            for k, c in self._scene.cameras.items()
+        }
+        with Path(path).open("wb") as f:
+            pickle.dump(cal_data, f)
 
     def setup(self):
         # TODO reset lighting
@@ -45,7 +68,7 @@ class CameraCalibrator:
         # TODO choose the correct robot
 
         mock_cam = "realsense_121622061798"
-        #mock_cam = "realsense_f1120593"
+        # mock_cam = "realsense_f1120593"
         from pathlib import Path
 
         for img_path in Path(f"demo_data/images/{mock_cam}").glob("*.png"):
@@ -60,8 +83,6 @@ class CameraCalibrator:
                 pose_path = Path(f"demo_data/poses/{mock_cam}/{index:04}.txt")
                 pose = np.loadtxt(str(pose_path))
 
-            print(f"Loaded image and pose: {img_path.stem}, {pose_path.stem}")
-            print(f"Position: {pose[:3, 3]}")
             self.mock_i += 1
             self.captured_images.append(img)
             self.captured_robot_poses.append(pose)
@@ -97,7 +118,10 @@ class CameraCalibrator:
         criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 0.00001)
 
         gray = None
-        for img,pose in tqdm(zip(self.captured_images, self.captured_robot_poses), desc="Detecting markers"):
+        for img, pose in tqdm(
+            zip(self.captured_images, self.captured_robot_poses),
+            desc="Detecting markers",
+        ):
             gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
             corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(
                 gray, self.aruco_dict
@@ -167,18 +191,15 @@ class CameraCalibrator:
         )
         if ret:
             for img, rvec, tvec in zip(allImgs, rvecs, tvecs):
-                vector6d = np.array([*tvec, *rvec])[:,0]
-                mat = get_affine_matrix_from_6d_vector(
-                    "Rodriguez", vector6d)
-                
+                vector6d = np.array([*tvec, *rvec])[:, 0]
+                mat = get_affine_matrix_from_6d_vector("Rodriguez", vector6d)
+
                 cam2monitor = mat @ self.markers2monitor
-                self._scene.background.draw_on_rgb(img, camera_matrix, dist_coeffs, cam2monitor, color=(255,0,0))
+                self._scene.background.draw_on_rgb(
+                    img, camera_matrix, dist_coeffs, cam2monitor, color=(255, 0, 0)
+                )
 
-                
         print("Done")
-        print("Intrinsic Camera Matrix:\n", camera_matrix)
-        print("Distortion: ", dist_coeffs.ravel())
-
 
         print("Calibrating extrinsics...")
         camera_poses = [
@@ -187,43 +208,53 @@ class CameraCalibrator:
         ]
         ret = self._optimize_handeye_matrix(camera_poses, allRobotPoses)
 
-
         x = ret["x"]
         extrinsic_matrix = invert_homogeneous(
             get_affine_matrix_from_6d_vector("xyz", x[:6])
         )
-        world2markers = invert_homogeneous(get_affine_matrix_from_6d_vector("xyz", x[6:]))
+        world2markers = invert_homogeneous(
+            get_affine_matrix_from_6d_vector("xyz", x[6:])
+        )
 
         self._scene.background.pose = world2markers @ self.markers2monitor
-        
 
         # update montor pose and draw on frame
         self._scene.background.pose = world2markers @ self.markers2monitor
         for img, world2robot in zip(allImgs, allRobotPoses):
             world2cam = world2robot @ extrinsic_matrix
             cam2monitor = invert_homogeneous(world2cam) @ self._scene.background.pose
-            self._scene.background.draw_on_rgb(img, camera_matrix, dist_coeffs, cam2monitor, color=(0,255,0))
-
+            self._scene.background.draw_on_rgb(
+                img, camera_matrix, dist_coeffs, cam2monitor, color=(0, 255, 0)
+            )
 
         print("Done")
-        print("Optimality", ret["optimality"])
-        print("Cost: ", ret["cost"])
-        print("Extrinsic Camera Matrix:\n", extrinsic_matrix)
-        print("World2Markers:\n", world2markers)
+        print("Optimality: ", ret["optimality"])
+        print("Cost:       ", ret["cost"])
 
-        # TODO save calibration
+        # set camera atttributes
+        self.selected_camera.intrinsic_matrix = camera_matrix
+        self.selected_camera.dist_coeffs = dist_coeffs
+        self.selected_camera.extrinsic_matrix = extrinsic_matrix
 
-    def get_live_img(self) -> np.ndarray:
-        # return live image from camera with projected charuco board (if calibrated)
-        # TODO get live img from camera
-        # If calibrated: draw charuco board on image
-        return np.random.uniform(size=(480, 640, 3), high=255).astype(np.uint8)
+    def get_live_img(self) -> np.ndarray | None:
+        monitor = self._scene.background
+        cam = self.selected_camera
+        frame = cam.get_frame()
+
+        if monitor.is_setup and cam.intrinsic_matrix is not None:
+            cam2monitor = invert_homogeneous(cam.pose) @ monitor.pose
+            monitor.draw_on_rgb(
+                frame.rgb,
+                cam.intrinsic_matrix,
+                cam.dist_coeffs,
+                cam2monitor,
+            )
+
+        return frame.rgb
 
     def get_selected_img(self, index) -> np.ndarray | None:
-        # return selected image from camera with projected charuco board from cv2 detection
         if index is None:
             return None
-        # project cv2 charuco board detection and estimated pose on image
         return self.captured_images[index]
 
     def setup_charuco_board(self):

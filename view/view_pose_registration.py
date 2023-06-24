@@ -16,7 +16,7 @@ class ViewPoseRegistration(ttk.Frame):
         self.registrator = registrator = PoseRegistrator()
 
         self.camera_selection = ttk.Combobox(
-            self, values=[c.name for c in self.scene.cameras]
+            self, values=[c.name for c in self.scene.cameras.values()]
         )
         self.camera_selection.grid()
 

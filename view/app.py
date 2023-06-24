@@ -1,4 +1,5 @@
 import tkinter as tk
+import tkinter.filedialog as filedialog
 from tkinter import ttk
 from model.scene import Scene
 import numpy as np
@@ -33,16 +34,30 @@ class App:
 
     def run(self):
         print("Running...")
+        self.menubar = tk.Menu(self.root)
+        self.filemenu = tk.Menu(self.menubar, tearoff=0)
+        self.filemenu.add_command(
+            label="Load Calibration...", command=self.on_menu_load_calib
+        )
+        self.filemenu.add_command(
+            label="Save Calibration as...", command=self.on_menu_save_calib
+        )
+        self.filemenu.add_separator()
+        self.filemenu.add_command(label="Exit", command=self.root.quit)
+        self.menubar.add_cascade(label="File", menu=self.filemenu)
+
+        self.root.config(menu=self.menubar)
+
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
         tabs = ttk.Notebook(self.root)
         tabs.grid(padx=10, pady=10, sticky=tk.NSEW)
 
-        ov = Overview(tabs, self.scene)
-        tabs.add(ov, text="Overview")
+        self.overview = Overview(tabs, self.scene)
+        tabs.add(self.overview, text="Overview")
 
-        cal = ViewCalibration(tabs, self.scene)
-        tabs.add(cal, text="1. Camera Calibration")
+        self.cal = ViewCalibration(tabs, self.scene)
+        tabs.add(self.cal, text="1. Camera Calibration")
 
         reg = ViewPoseRegistration(tabs, self.scene)
         tabs.add(reg, text="2. Pose Registration")
@@ -51,3 +66,17 @@ class App:
         tabs.add(acq, text="3. Acquisition")
 
         tk.mainloop()
+
+    def on_menu_load_calib(self):
+        file = filedialog.askopenfile(
+            title="Select Calibration file",
+            filetypes=(("calibration files", "*.cal"), ("all files", "*.*")),
+        )
+        self.cal.calibrator.load(file.name)
+
+    def on_menu_save_calib(self):
+        file = filedialog.asksaveasfile(
+            title="Save Calibration file",
+            filetypes=(("calibration files", "*.cal"), ("all files", "*.*")),
+        )
+        self.cal.calibrator.save(file.name)

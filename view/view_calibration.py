@@ -6,6 +6,7 @@ from control.camera_calibration import CameraCalibrator
 import numpy as np
 import cv2
 from view.resizable_image import ResizableImage
+import threading
 
 
 class ViewCalibration(ttk.Frame):
@@ -23,10 +24,18 @@ class ViewCalibration(ttk.Frame):
         self.columnconfigure(1, weight=0, minsize=200)
         self.rowconfigure(1, weight=1)
 
-        self.calibrator = CameraCalibrator(self.scene, None)
+        self.calibrator = CameraCalibrator(self.scene)
 
         self.setup_controls()
         self.setup_previews()
+
+        self.stop_event = threading.Event()
+        self.live_thread = threading.Thread(target=self.live_thread_fn)
+        self.live_thread.start()
+
+    def destroy(self) -> None:
+        self.stop_event.set()
+        return super().destroy()
 
     def setup_controls(self):
         self.control_frame = ttk.Frame(self)
@@ -39,8 +48,9 @@ class ViewCalibration(ttk.Frame):
         )
 
         self.camera_selection = ttk.Combobox(
-            self.control_frame, values=[c.name for c in self.scene.cameras]
+            self.control_frame, values=[c.name for c in self.scene.cameras.values()]
         )
+        self.camera_selection.set(self.calibrator.selected_camera.name)
         self.camera_selection.bind(
             "<<ComboboxSelected>>", self.calibrator.select_camera
         )
@@ -52,7 +62,7 @@ class ViewCalibration(ttk.Frame):
         self.clear_button = ttk.Button(
             self.control_frame,
             text="Delete Captured Images",
-            command=self.calibrator.captured_images.clear,
+            command=self.on_delete,
         )
 
         self.image_selection = ttk.Combobox(self.control_frame)
@@ -79,23 +89,25 @@ class ViewCalibration(ttk.Frame):
         self.preview_frame.rowconfigure(0, weight=1)
         self.preview_frame.rowconfigure(1, weight=1)
         self.preview_frame.columnconfigure(0, weight=1)
-        
+
         live_img = self.calibrator.get_live_img()
-        self.live_canvas = ResizableImage(self.preview_frame, image=live_img,bg="#000000")
+        self.live_canvas = ResizableImage(
+            self.preview_frame, image=live_img, bg="#000000"
+        )
 
         self.selected_image_canvas = ResizableImage(self.preview_frame, bg="#000000")
 
         self.live_canvas.grid(row=0, sticky=tk.NSEW)
         self.selected_image_canvas.grid(row=1, sticky=tk.NSEW)
 
-
-
     def update_selected_image_preview(self):
         selected = self.image_selection.get()
-        selected_index = int(selected.split(" ")[-1])
+        try:
+            selected_index = int(selected.split(" ")[-1])
+        except ValueError:
+            return
 
         img = self.calibrator.get_selected_img(selected_index)
-
         if img is not None:
             self.selected_image_canvas.set_image(img)
 
@@ -111,3 +123,17 @@ class ViewCalibration(ttk.Frame):
     def on_calibrate(self):
         self.calibrator.calibrate()
         self.update_selected_image_preview()
+
+    def on_delete(self):
+        self.calibrator.captured_images.clear()
+        self.image_selection["values"] = []
+        self.image_selection.set("")
+        self.selected_image_canvas.clear_image()
+
+    def live_thread_fn(self):
+        while not self.stop_event.is_set():
+            try:
+                img = self.calibrator.get_live_img()
+                self.live_canvas.set_image(img)
+            except Exception:
+                pass

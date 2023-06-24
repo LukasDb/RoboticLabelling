@@ -63,15 +63,11 @@ class BackgroundMonitor(Entity):
             self.screen_width_m = 16 / diagonal_16_by_9 * 0.800
             self.screen_height_m = 9 / diagonal_16_by_9 * 0.800
 
-            print("screen_width_m", self.screen_width_m)
-            print("screen_height_m", self.screen_height_m)
-
         # check for successfull fullscreen:
         if self.width == self.screen_width and self.height == self.screen_height:
-            print("Fullscreen successful")
             self.is_setup = True
         else:
-            print("Fullscreen failed")
+            print("Setting window to fullscreen failed!")
 
     def set_image(self, image: np.ndarray):
         """Set the image of the background monitor"""
