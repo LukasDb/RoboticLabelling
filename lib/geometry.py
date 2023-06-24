@@ -36,3 +36,10 @@ def homogeneous_mat_from_RT(rot, t):
         trans[:3, 3] = t
 
     return trans
+
+
+def get_rvec_tvec_from_affine_matrix(affine):
+    rot = affine[:3, :3]
+    tvec = affine[:3, 3]
+    rvec, _ = cv2.Rodrigues(rot)
+    return rvec, tvec

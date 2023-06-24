@@ -1,0 +1,45 @@
+import tkinter as tk
+from PIL import ImageTk, Image
+import numpy as np
+import cv2
+
+class ResizableImage(tk.Canvas):
+    def __init__(self, parent, image=None, **kwargs):
+        tk.Canvas.__init__(self, parent, **kwargs)
+        self._canvas_img = self.create_image(0, 0, anchor=tk.NW)
+        self._img_tk: ImageTk.PhotoImage = None
+        self._img: np.ndarray = None
+
+        if image is not None:
+            self._img = image.copy()
+
+        self.bind("<Configure>", self._on_resize)
+
+    def _on_resize(self, event=None):
+        if event is not None:
+            self.widget_width = event.width
+            self.widget_height = event.height
+
+        if self._img is None:
+            return
+            
+        img_width = self._img.shape[1]
+        img_height = self._img.shape[0]
+
+        scale = min(self.widget_width / img_width, self.widget_height / img_height)
+        scaled_img_width = int(img_width * scale)
+        scaled_img_height = int(img_height * scale)
+        img_resized = cv2.resize(self._img.copy(), (scaled_img_width, scaled_img_height))
+
+        self._img_tk = ImageTk.PhotoImage(Image.fromarray(img_resized))
+        self.itemconfig(self._canvas_img, image=self._img_tk) #, anchor=tk.CENTER)
+        #self.moveto(self._canvas_img, canvas_center[0], canvas_center[1])
+
+    def set_image(self, image):
+        self._img = image.copy()
+        self._on_resize()
+    
+
+
+
+

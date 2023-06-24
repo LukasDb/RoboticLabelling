@@ -12,6 +12,11 @@ from scipy import optimize
 
 
 class CameraCalibrator:
+    CHESSBOARD_SIZE = 0.0286 # better 0.05 or bigger
+    MARKER_SIZE = 0.023 
+    MARKERS = (7,5)
+    CHARUCO_DICT = aruco.DICT_6X6_250
+
     def __init__(self, scene: Scene, selected_camera):
         # needs to be persistent (which is not the case here)
         super().__init__()
@@ -21,6 +26,7 @@ class CameraCalibrator:
         self.selected_camera: Camera = None
         self.aruco_dict = None
         self.charuco_board = None
+        self.markers2monitor = np.eye(4)
 
         self.mock_i = 0
 
@@ -38,16 +44,24 @@ class CameraCalibrator:
         # TODO actually capture image from camera
         # TODO choose the correct robot
 
-        # mock_cam = "realsense_121622061798"
-        mock_cam = "realsense_f1120593"
+        mock_cam = "realsense_121622061798"
+        #mock_cam = "realsense_f1120593"
         from pathlib import Path
 
         for img_path in Path(f"demo_data/images/{mock_cam}").glob("*.png"):
             index = int(img_path.stem)
-            pose_path = Path(f"demo_data/poses/{mock_cam}/{index}.txt")
             img = cv2.imread(str(img_path))
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            pose = np.loadtxt(str(pose_path))
+
+            try:
+                pose_path = Path(f"demo_data/poses/{mock_cam}/{index}.txt")
+                pose = np.loadtxt(str(pose_path))
+            except Exception:
+                pose_path = Path(f"demo_data/poses/{mock_cam}/{index:04}.txt")
+                pose = np.loadtxt(str(pose_path))
+
+            print(f"Loaded image and pose: {img_path.stem}, {pose_path.stem}")
+            print(f"Position: {pose[:3, 3]}")
             self.mock_i += 1
             self.captured_images.append(img)
             self.captured_robot_poses.append(pose)
@@ -77,13 +91,13 @@ class CameraCalibrator:
 
         allCorners = []
         allIds = []
-        decimator = 0
-        markers = []
+        allImgs = []
+        allRobotPoses = []
         # SUB PIXEL CORNER DETECTION CRITERION
         criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 0.00001)
 
         gray = None
-        for img in tqdm(self.captured_images, desc="Detecting markers"):
+        for img,pose in tqdm(zip(self.captured_images, self.captured_robot_poses), desc="Detecting markers"):
             gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
             corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(
                 gray, self.aruco_dict
@@ -100,7 +114,7 @@ class CameraCalibrator:
                         zeroZone=(-1, -1),
                         criteria=criteria,
                     )
-                markers.append(corners)
+
                 _, inter_corners, inter_ids = cv2.aruco.interpolateCornersCharuco(
                     corners, ids, gray, self.charuco_board
                 )
@@ -108,14 +122,11 @@ class CameraCalibrator:
                     inter_corners is not None
                     and inter_ids is not None
                     and len(inter_corners) > 3
-                    and decimator % 1 == 0
                 ):
                     allCorners.append(inter_corners)
                     allIds.append(inter_ids)
-
-                    # draw onto img
-
-            decimator += 1
+                    allImgs.append(img)
+                    allRobotPoses.append(pose)
 
         imsize = gray.shape
 
@@ -155,34 +166,50 @@ class CameraCalibrator:
             criteria=(cv2.TERM_CRITERIA_EPS & cv2.TERM_CRITERIA_COUNT, 10000, 1e-9),
         )
         if ret:
-            for img, rvec, tvec in zip(self.captured_images, rvecs, tvecs):
-                cv2.drawFrameAxes(
-                    img,
-                    camera_matrix,
-                    dist_coeffs,
-                    rvec,
-                    tvec,
-                    0.3,
-                )
+            for img, rvec, tvec in zip(allImgs, rvecs, tvecs):
+                vector6d = np.array([*tvec, *rvec])[:,0]
+                mat = get_affine_matrix_from_6d_vector(
+                    "Rodriguez", vector6d)
+                
+                cam2monitor = mat @ self.markers2monitor
+                self._scene.background.draw_on_rgb(img, camera_matrix, dist_coeffs, cam2monitor, color=(255,0,0))
+
+                
         print("Done")
-        print("Intrensic Camera Matrix:\n", camera_matrix)
+        print("Intrinsic Camera Matrix:\n", camera_matrix)
+        print("Distortion: ", dist_coeffs.ravel())
+
 
         print("Calibrating extrinsics...")
         camera_poses = [
             np.concatenate([tvec, rvec], axis=0)[:, 0]
             for tvec, rvec in zip(tvecs, rvecs)
         ]
-        ret = self._optimize_handeye_matrix(camera_poses, self.captured_robot_poses)
+        ret = self._optimize_handeye_matrix(camera_poses, allRobotPoses)
 
-        x = ret["x"][:6]
+
+        x = ret["x"]
         extrinsic_matrix = invert_homogeneous(
-            get_affine_matrix_from_6d_vector("xyz", x)
+            get_affine_matrix_from_6d_vector("xyz", x[:6])
         )
+        world2markers = invert_homogeneous(get_affine_matrix_from_6d_vector("xyz", x[6:]))
+
+        self._scene.background.pose = world2markers @ self.markers2monitor
+        
+
+        # update montor pose and draw on frame
+        self._scene.background.pose = world2markers @ self.markers2monitor
+        for img, world2robot in zip(allImgs, allRobotPoses):
+            world2cam = world2robot @ extrinsic_matrix
+            cam2monitor = invert_homogeneous(world2cam) @ self._scene.background.pose
+            self._scene.background.draw_on_rgb(img, camera_matrix, dist_coeffs, cam2monitor, color=(0,255,0))
+
 
         print("Done")
         print("Optimality", ret["optimality"])
         print("Cost: ", ret["cost"])
         print("Extrinsic Camera Matrix:\n", extrinsic_matrix)
+        print("World2Markers:\n", world2markers)
 
         # TODO save calibration
 
@@ -201,36 +228,36 @@ class CameraCalibrator:
 
     def setup_charuco_board(self):
         width = self._scene.background.screen_width
-        width_mm = self._scene.background.screen_width_mm
+        width_m = self._scene.background.screen_width_m
         height = self._scene.background.screen_height
-        height_mm = self._scene.background.screen_height_mm
+        height_m = self._scene.background.screen_height_m
 
-        # MOCK FOR NOW
-        height = 2160
-        width = 3840
-        width_mm = 16 / np.sqrt(16**2 + 9**2) * 0.8001 * 1000
-        height_mm = 9 / np.sqrt(16**2 + 9**2) * 0.8001 * 1000
+        pixel_w = width_m / width
+        pixel_h = height_m / height
+        # print(f"Pixel dimensions: {pixel_w} x {pixel_h} m")
 
-        pixel_w = width_mm / width / 1000.0
-        pixel_h = height_mm / height / 1000.0
-        print(f"Pixel dimensions: {pixel_w} x {pixel_h} m")
-
-        chessboardSize = 0.05 // pixel_w * pixel_w  # in m
-        # pixel_size * 126  # old value: 0.023 # [m]
-        markerSize = 0.04 // pixel_w * pixel_w
-        n_markers = (7, 5)  # x,y
+        chessboard_size = self.CHESSBOARD_SIZE // pixel_w * pixel_w  # in m
+        marker_size = self.MARKER_SIZE // pixel_w * pixel_w
+        n_markers = self.MARKERS  # x,y
 
         # create an appropriately sized image
-        charuco_img_width = n_markers[0] * chessboardSize  # in m
-        charuco_img_width = charuco_img_width / width_mm * width * 1000  # in pixel
+        charuco_img_width_m = n_markers[0] * chessboard_size  # in m
+        charuco_img_width = charuco_img_width_m / width_m * width  # in pixel
 
-        charuco_img_height = n_markers[1] * chessboardSize  # in m
-        charuco_img_height = charuco_img_height / height_mm * height * 1000
+        charuco_img_height_m = n_markers[1] * chessboard_size  # in m
+        charuco_img_height = charuco_img_height_m / height_m * height
 
-        self.aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_6X6_250)
+        # charuco board is created with pixel_w as square size
+        # the actual pixel dimensions can vary so image needs to stretched/compressed in y
+        y_factor = pixel_h / pixel_w
+        print("Apply y factor: ", y_factor)
+        charuco_img_height *= y_factor
+
+        self.aruco_dict = aruco.getPredefinedDictionary(self.CHARUCO_DICT)
         self.charuco_board = aruco.CharucoBoard.create(
-            n_markers[0], n_markers[1], chessboardSize, markerSize, self.aruco_dict
+            n_markers[0], n_markers[1], chessboard_size, marker_size, self.aruco_dict
         )
+
         print(
             "Creating Charuco image with size: ", charuco_img_width, charuco_img_height
         )
@@ -252,10 +279,16 @@ class CameraCalibrator:
 
         self._scene.background.set_image(charuco_img)
 
+        # calculate transform to the center of the screen
+        # same orientation, translated by half of charco width and height
+        self.markers2monitor = np.eye(4)
+        self.markers2monitor[0, 3] = charuco_img_width_m / 2.0
+        self.markers2monitor[1, 3] = charuco_img_height_m / 2.0
+
         print(
-            f"Confirm the dimensions of the chessboard in the image: {chessboardSize}"
+            f"Confirm the dimensions of the chessboard in the image: {chessboard_size}"
         )
-        print(f"Confirm the dimensions of the markers in the image: {markerSize}")
+        print(f"Confirm the dimensions of the markers in the image: {marker_size}")
 
     def _optimize_handeye_matrix(self, camera_poses, robot_poses):
         camera2tool_t = np.zeros((6,))

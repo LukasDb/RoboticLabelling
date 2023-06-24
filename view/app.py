@@ -33,8 +33,10 @@ class App:
 
     def run(self):
         print("Running...")
+        self.root.columnconfigure(0, weight=1)
+        self.root.rowconfigure(0, weight=1)
         tabs = ttk.Notebook(self.root)
-        tabs.grid(padx=10, pady=10, sticky="NESW")
+        tabs.grid(padx=10, pady=10, sticky=tk.NSEW)
 
         ov = Overview(tabs, self.scene)
         tabs.add(ov, text="Overview")

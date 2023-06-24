@@ -5,6 +5,7 @@ from model.scene import Scene
 from control.camera_calibration import CameraCalibrator
 import numpy as np
 import cv2
+from view.resizable_image import ResizableImage
 
 
 class ViewCalibration(ttk.Frame):
@@ -16,12 +17,11 @@ class ViewCalibration(ttk.Frame):
         self.scene = scene
 
         self.title = ttk.Label(self, text="1. Camera Calibration")
-        self.control_frame = ttk.Frame(self)
-        self.preview_frame = ttk.Frame(self)
-
         self.title.grid(row=0, column=0, columnspan=2)
-        self.control_frame.grid(row=1, column=1, sticky=tk.N)
-        self.preview_frame.grid(row=1, column=0)
+
+        self.columnconfigure(0, weight=1)
+        self.columnconfigure(1, weight=0, minsize=200)
+        self.rowconfigure(1, weight=1)
 
         self.calibrator = CameraCalibrator(self.scene, None)
 
@@ -29,6 +29,9 @@ class ViewCalibration(ttk.Frame):
         self.setup_previews()
 
     def setup_controls(self):
+        self.control_frame = ttk.Frame(self)
+        self.control_frame.grid(row=1, column=1, sticky=tk.NE)
+
         self.btn_setup = ttk.Button(
             self.control_frame,
             text="Setup",
@@ -60,7 +63,7 @@ class ViewCalibration(ttk.Frame):
         self.calibrate_button = ttk.Button(
             self.control_frame,
             text="Calibrate Intrinsics & Hand-Eye",
-            command=self.calibrator.calibrate,
+            command=self.on_calibrate,
         )
 
         self.btn_setup.grid(row=0)
@@ -71,42 +74,40 @@ class ViewCalibration(ttk.Frame):
         self.calibrate_button.grid(row=5)
 
     def setup_previews(self):
-        self.live_canvas = tk.Canvas(
-            self.preview_frame, width=self.PREVIEW_WIDTH, height=self.PREVIEW_HEIGHT
-        )
-        self.selected_image_canvas = tk.Canvas(
-            self.preview_frame, width=self.PREVIEW_WIDTH, height=self.PREVIEW_HEIGHT
-        )
+        self.preview_frame = ttk.Frame(self)
+        self.preview_frame.grid(row=1, column=0, sticky=tk.NSEW)
+        self.preview_frame.rowconfigure(0, weight=1)
+        self.preview_frame.rowconfigure(1, weight=1)
+        self.preview_frame.columnconfigure(0, weight=1)
+        
+        live_img = self.calibrator.get_live_img()
+        self.live_canvas = ResizableImage(self.preview_frame, image=live_img,bg="#000000")
 
-        self.live_img_tk = ImageTk.PhotoImage(
-            image=Image.fromarray(self.calibrator.get_live_img())
-        )
-        self.live_canvas.create_image(0, 0, anchor=tk.NW, image=self.live_img_tk)
-        self.selected_image_container = self.selected_image_canvas.create_image(
-            0, 0, anchor=tk.NW
-        )
+        self.selected_image_canvas = ResizableImage(self.preview_frame, bg="#000000")
 
-        self.live_canvas.grid(row=0)
-        self.selected_image_canvas.grid(row=1)
+        self.live_canvas.grid(row=0, sticky=tk.NSEW)
+        self.selected_image_canvas.grid(row=1, sticky=tk.NSEW)
+
+
 
     def update_selected_image_preview(self):
         selected = self.image_selection.get()
         selected_index = int(selected.split(" ")[-1])
 
         img = self.calibrator.get_selected_img(selected_index)
-        img = cv2.resize(img, (self.PREVIEW_WIDTH, self.PREVIEW_HEIGHT))
 
         if img is not None:
-            self.sel_img_tk = ImageTk.PhotoImage(image=Image.fromarray(img))
-            self.selected_image_canvas.itemconfig(
-                self.selected_image_container, image=self.sel_img_tk
-            )
+            self.selected_image_canvas.set_image(img)
 
     def on_capture(self):
         self.calibrator.capture_image()
         self.image_selection["values"] = [
             f"Image {i:2}" for i in range(len(self.calibrator.captured_images))
         ]
-        self.image_selection.set(len(self.calibrator.captured_images) - 1)
+        self.image_selection.set(self.image_selection["values"][-1])
 
+        self.update_selected_image_preview()
+
+    def on_calibrate(self):
+        self.calibrator.calibrate()
         self.update_selected_image_preview()
