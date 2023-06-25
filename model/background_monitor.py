@@ -68,7 +68,7 @@ class BackgroundMonitor(Entity):
         self.image_tk = ImageTk.PhotoImage(image=Image.fromarray(image))
         self.canvas.itemconfig(self.image_container, image=self.image_tk)
 
-    def draw_on_rgb(self, rgb, intrinsic, dist_coeffs, cam2monitor, color=(255, 0, 0)):
+    def draw_on_rgb(self, rgb, intrinsic, dist_coeffs, cam2monitor, color=(0, 255, 0)):
         """Draw the background monitor on the rgb image"""
         half_w = self.screen_width_m / 2.0
         half_h = self.screen_height_m / 2.0
@@ -81,6 +81,7 @@ class BackgroundMonitor(Entity):
                 [-half_w, half_h, 0, 1],
             ]
         )
+
         screen_corners_cam = cam2monitor @ screen_corners.T
         # screen_corners_world = self.pose @ screen_corners.T
         img_points, _ = cv2.projectPoints(
@@ -95,12 +96,15 @@ class BackgroundMonitor(Entity):
             dist_coeffs,
         )
 
+        img_points = img_points.astype(np.int32)
+
         cv2.drawContours(
             rgb,
-            [img_points.astype(np.int32)],
-            0,
+            [img_points],
+            -1,  # draw all contours
             color,
-            2,
+            3,  # negative == filled
+            lineType=cv2.LINE_AA,
         )
 
         # rvec, tvec = get_rvec_tvec_from_affine_matrix(cam2monitor)
