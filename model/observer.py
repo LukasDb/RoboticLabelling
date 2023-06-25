@@ -4,6 +4,7 @@ from typing import List
 
 class Event(Enum):
     CAMERA_CALIBRATED = auto()
+    CAMERA_ATTACHED = auto()
 
 
 class Subject:

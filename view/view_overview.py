@@ -37,7 +37,7 @@ class Overview(Observer, tk.Frame):
         self.robot_check = self.setup_robot_pose()
         self.bg_setup = self.setup_background_window()
         self._cam_rows: Dict[str, Dict] = {}
-        self.cam_table = self.setup_camera_table()
+        self.cam_overview = self.setup_camera_table()
 
         self.manual = tk.Label(self, text=manual_text)
 
@@ -46,11 +46,11 @@ class Overview(Observer, tk.Frame):
         self.title.grid()
         self.robot_check.grid()
         self.bg_setup.grid()
-        self.cam_table.grid(sticky=tk.NSEW)
+        self.cam_overview.grid(sticky=tk.NSEW, pady=(10, 10))
         self.manual.grid()
 
     def update(self, subject, event: Event, *args, **kwargs):
-        if event == Event.CAMERA_CALIBRATED:
+        if event == Event.CAMERA_CALIBRATED or event == Event.CAMERA_ATTACHED:
             # update calibrated column
             self._update_cam_row(subject.unique_id)
 
@@ -75,7 +75,7 @@ class Overview(Observer, tk.Frame):
 
         for i, c in enumerate(self._scene.cameras.values()):
             row = tk.Frame(self.cam_table)
-            row.grid(row=i, column=0, sticky=tk.EW)
+            row.grid(row=i, column=0, sticky=tk.EW, pady=(5, 5))
 
             row.columnconfigure(0, weight=1)
             row.columnconfigure(1, weight=1)
@@ -123,8 +123,10 @@ class Overview(Observer, tk.Frame):
         cam = self._scene.cameras[cam_unique_id]
         row = self._cam_rows[cam_unique_id]
         row["cam_name"].configure(text=f"{cam.name} ({cam.unique_id})")
+        is_calibrated = cam.intrinsic_matrix is not None
         row["calibrated"].configure(
-            text="Yes" if cam.intrinsic_matrix is not None else "No"
+            text="Yes" if is_calibrated else "No",
+            fg="green" if is_calibrated else "red",
         )
         row["parent"].set("-" if cam.parent is None else cam.parent.name)
         # row["parent"].configure(text="-" if cam.parent is None else cam.parent.name)

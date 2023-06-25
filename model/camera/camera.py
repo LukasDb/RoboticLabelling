@@ -1,4 +1,6 @@
 from abc import ABC, abstractmethod, abstractproperty
+
+from model.entity import Entity
 from ..entity import Entity
 from ..observer import Subject, Event
 from dataclasses import dataclass
@@ -39,6 +41,10 @@ class Camera(Entity, Subject, ABC):
     def dist_coeffs(self):
         return self._dist_coeffs
 
+    def attach(self, parent: Entity, link_matrix: np.ndarray):
+        super().attach(parent, link_matrix)
+        self.notify(Event.CAMERA_ATTACHED)
+
     def set_calibration(
         self,
         intrinsic_matrix: np.ndarray,
@@ -50,7 +56,6 @@ class Camera(Entity, Subject, ABC):
             self._dist_coeffs = dist_coeffs
             self._extrinsics = extrinsic_matrix
         self.notify(Event.CAMERA_CALIBRATED)
-
 
     @abstractmethod
     def get_frame(self) -> CamFrame:

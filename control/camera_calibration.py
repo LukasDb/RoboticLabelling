@@ -47,6 +47,9 @@ class CameraCalibrator:
             intrinsic_matrix = cal_data[c.unique_id]["intrinsic"]
             dist_coeffs = cal_data[c.unique_id]["dist_coeffs"]
             extrinsic_matrix = cal_data[c.unique_id]["extrinsic"]
+            parent = cal_data[c.unique_id]["attached_to"]
+            if parent != "none":
+                c.attach(self._scene.robots[parent], extrinsic_matrix)
             c.set_calibration(intrinsic_matrix, dist_coeffs, extrinsic_matrix)
         except KeyError:
             print("No calibration data for this camera")
@@ -58,6 +61,7 @@ class CameraCalibrator:
                 "intrinsic": c.intrinsic_matrix,
                 "dist_coeffs": c.dist_coeffs,
                 "extrinsic": c._link_matrix,
+                "attached_to": "none" if c.parent is None else c.parent.name,
             },
             "background_pose": self._scene.background.pose,
         }
@@ -248,13 +252,7 @@ class CameraCalibrator:
         world2robot = self.captured_robot_poses[index]
         world2cam = world2robot @ cam.extrinsic_matrix
         cam2monitor = invert_homogeneous(world2cam) @ monitor.pose
-        monitor.draw_on_rgb(
-            img,
-            cam.intrinsic_matrix,
-            cam.dist_coeffs,
-            cam2monitor,
-            color=(0, 255, 0),
-        )
+        monitor.draw_on_rgb(img, cam.intrinsic_matrix, cam.dist_coeffs, cam2monitor)
 
         cal_result = self.calibration_results[index]
         if not cal_result["detected"]:
