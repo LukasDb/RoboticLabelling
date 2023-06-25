@@ -41,5 +41,6 @@ class ResizableImage(tk.Canvas):
         self._on_resize()  # resize to canvas
 
     def clear_image(self):
-        del self._img_tk
-        del self._img
+        if self.winfo_exists():
+            del self._img_tk
+            del self._img

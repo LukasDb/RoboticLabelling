@@ -22,7 +22,7 @@ class FanucCRX10iAL(Robot):
             req = requests.get(url, timeout=1.0)
         except requests.exceptions.Timeout:
             print(f"Can not reach robot: {self.name}")
-            exit(-1)
+            return super().pose
         jdict = json.loads(req.text)
         pose, _ = self.__parse_remote_position(jdict)
         self._pose = pose
