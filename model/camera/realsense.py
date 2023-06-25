@@ -1,27 +1,38 @@
 from .camera import Camera, CamFrame
 import numpy as np
+from typing import List
 import cv2
 import pyrealsense2 as rs
 
 
-class RealsenseD415(Camera):
+class Realsense(Camera):
     RGB_H = 1080
     RGB_W = 1920
     DEPTH_H = 1280
     DEPTH_W = 720
 
-    def __init__(self):
+    @staticmethod
+    def get_available_devices() -> List["Realsense"]:
+        ctx = rs.context()
+        devices = ctx.query_devices()
+        cams = []
+        for dev in devices:
+            print("Found device: ", dev.get_info(rs.camera_info.name))
+            serial_number = dev.get_info(rs.camera_info.serial_number)
+            cams.append(Realsense(serial_number))
+        return cams
+
+    def __init__(self, serial_number):
         super().__init__("Realsense D415")
 
         self.is_hq_depth = True
+        self._serial_number = serial_number
 
-        self.device = None
-        self.pipeline = None
+        self._pipeline = rs.pipeline()
+        self._config = config = rs.config()
+        config.enable_device(self._serial_number)
 
-        self.pipeline = rs.pipeline()
-        self.config = config = rs.config()
-
-        pipeline_wrapper = rs.pipeline_wrapper(self.pipeline)
+        pipeline_wrapper = rs.pipeline_wrapper(self._pipeline)
         try:
             pipeline_profile = config.resolve(pipeline_wrapper)
         except RuntimeError:
@@ -31,10 +42,10 @@ class RealsenseD415(Camera):
             exit()
         self.device = pipeline_profile.get_device()
 
-        self.config.enable_stream(
+        config.enable_stream(
             rs.stream.depth, self.DEPTH_W, self.DEPTH_H, rs.format.z16, 30
         )
-        self.config.enable_stream(
+        config.enable_stream(
             rs.stream.color, self.RGB_W, self.RGB_H, rs.format.bgr8, 30
         )
         self.align_to_rgb = rs.align(rs.stream.color)
@@ -55,12 +66,12 @@ class RealsenseD415(Camera):
         self.depth_scale = self.device.first_depth_sensor().get_depth_scale()
 
         # Start streaming
-        self.pipeline.start(self.config)
+        self._pipeline.start(self._config)
 
     def get_frame(self) -> CamFrame:
         output = CamFrame()
 
-        frames = self.pipeline.wait_for_frames()
+        frames = self._pipeline.wait_for_frames()
         # makes depth frame same resolution as rgb frame
         frames = self.align_to_rgb.process(frames)
 
@@ -88,7 +99,7 @@ class RealsenseD415(Camera):
 
     @property
     def unique_id(self) -> str:
-        return "realsense_" + str(self.device.get_info(rs.camera_info.serial_number))
+        return "realsense_" + str(self._serial_number)
 
     def _set_hq_depth(self):
         self.is_hq_depth = True

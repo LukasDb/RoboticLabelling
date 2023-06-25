@@ -5,7 +5,7 @@ from model.scene import Scene
 import numpy as np
 
 from model.fanuc_crx10ial import FanucCRX10iAL
-from model.camera.rs_d415 import RealsenseD415
+from model.camera.realsense import Realsense
 from model.camera.demo_cam import DemoCam
 
 
@@ -28,13 +28,24 @@ class App:
         self.scene = Scene()
 
         crx = FanucCRX10iAL()
-        cam = RealsenseD415()
-        cam2 = DemoCam()
-        cam.attach(crx, np.eye(4))  # TODO load from disk?
-
         self.scene.add_robot(crx)
-        self.scene.add_camera(cam)
-        self.scene.add_camera(cam2)
+
+        # find connected realsense devices
+        for cam in Realsense.get_available_devices():
+            self.scene.add_camera(cam)
+            cam.attach(crx, np.eye(4))
+
+        # add demo cameras
+        self.scene.add_camera(DemoCam("Demo Cam"))
+        c1 = DemoCam("demo_cam_1")
+        c1.attach(crx, np.eye(4))
+        self.scene.add_camera(c1)
+        self.scene.add_camera(DemoCam("demo_cam_2"))
+        self.scene.add_camera(DemoCam("demo_cam_3"))
+        self.scene.add_camera(DemoCam("demo_cam_4"))
+        self.scene.add_camera(DemoCam("demo_cam_5"))
+        self.scene.add_camera(DemoCam("demo_cam_6"))
+        self.scene.add_camera(DemoCam("demo_cam_7"))
 
     def run(self):
         print("Running...")
@@ -79,8 +90,12 @@ class App:
         self.cal.calibrator.load(file.name)
 
     def on_menu_save_calib(self):
+        default_name = self.cal.calibrator.selected_camera.name.replace(" ", "_")
+
         file = filedialog.asksaveasfile(
             title="Save Calibration file",
             filetypes=(("calibration files", "*.cal"), ("all files", "*.*")),
+            defaultextension=".cal",
+            initialfile=default_name,
         )
         self.cal.calibrator.save(file.name)
