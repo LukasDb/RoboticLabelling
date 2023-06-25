@@ -1,11 +1,13 @@
 import numpy as np
 from scipy.spatial.transform import Rotation as R
+from threading import Lock
 
 
 class Entity:
     """An entity is an object in the world that has a position and orientation"""
 
     def __init__(self, name: str):
+        self.lock = Lock()
         self.name = name
         self._pose = np.eye(4)  # global world 2 entity pose
         self.parent: Entity = None
@@ -25,16 +27,24 @@ class Entity:
 
     @property
     def pose(self) -> np.ndarray:
-        if self.parent is None:
-            return self._pose
-        else:
-            return self.parent.pose @ self._link_matrix
+        with self.lock:
+            if self.parent is None:
+                pose = self._pose
+            else:
+                pose = self.parent.pose @ self._link_matrix
+            return pose
 
     @pose.setter
     def pose(self, pose: np.ndarray):
         self._pose = pose
 
     def attach(self, parent: "Entity", link_matrix: np.ndarray):
-        self.parent = parent
-        self._link_matrix = link_matrix
-        self._pose = self.parent.pose @ self._link_matrix
+        with self.lock:
+            self.parent = parent
+            self._link_matrix = link_matrix
+            self._pose = self.parent.pose @ self._link_matrix
+
+    def detach(self):
+        with self.lock:
+            self.parent = None
+            self._link_matrix = None

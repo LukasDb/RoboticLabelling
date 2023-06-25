@@ -28,7 +28,7 @@ class CameraCalibrator:
 
         self.calibration_results: List[Dict] = []
 
-        last_cam = list(self._scene.cameras.values())[-1]
+        last_cam = list(self._scene.cameras.values())[0]
         self.selected_camera: Camera = last_cam
         self.aruco_dict = None
         self.charuco_board = None
@@ -41,24 +41,27 @@ class CameraCalibrator:
             cal_data = pickle.load(f)
 
         self._scene.background.pose = cal_data["background_pose"]
-        for k, c in self._scene.cameras.items():
-            try:
-                c.intrinsic_matrix = cal_data[k]["intrinsic"]
-                c.dist_coeffs = cal_data[k]["dist_coeffs"]
-                c.extrinsic_matrix = cal_data[k]["extrinsic"]
-            except KeyError:
-                print("No calibration data for camera: ", k)
+        c = self.selected_camera
+
+        try:
+            intrinsic_matrix = cal_data[c.unique_id]["intrinsic"]
+            dist_coeffs = cal_data[c.unique_id]["dist_coeffs"]
+            extrinsic_matrix = cal_data[c.unique_id]["extrinsic"]
+            c.set_calibration(intrinsic_matrix, dist_coeffs, extrinsic_matrix)
+        except KeyError:
+            print("No calibration data for this camera")
 
     def save(self, path):
+        c = self.selected_camera
         cal_data = {
-            k: {
+            c.unique_id: {
                 "intrinsic": c.intrinsic_matrix,
                 "dist_coeffs": c.dist_coeffs,
                 "extrinsic": c._link_matrix,
-            }
-            for k, c in self._scene.cameras.items()
+            },
+            "background_pose": self._scene.background.pose,
         }
-        cal_data["background_pose"] = self._scene.background.pose
+
         with Path(path).open("wb") as f:
             pickle.dump(cal_data, f)
 
@@ -208,9 +211,9 @@ class CameraCalibrator:
         self._scene.background.pose = world2markers @ self.markers2monitor
 
         # set camera atttributes
-        self.selected_camera.intrinsic_matrix = camera_matrix
-        self.selected_camera.dist_coeffs = dist_coeffs
-        self.selected_camera.extrinsic_matrix = extrinsic_matrix
+        self.selected_camera.set_calibration(
+            camera_matrix, dist_coeffs, extrinsic_matrix
+        )
 
     def get_live_img(self) -> np.ndarray | None:
         monitor = self._scene.background

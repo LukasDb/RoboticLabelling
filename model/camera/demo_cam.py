@@ -7,8 +7,9 @@ import time
 
 
 class DemoCam(Camera):
-    def __init__(self):
+    def __init__(self, unique_id: str):
         super().__init__("MockCam")
+        self._unique_id = unique_id
         self.mock_cam = "realsense_121622061798"
         # self.mock_cam = "realsense_f1120593"
         self.img_paths = cycle(Path(f"demo_data/images/{self.mock_cam}").glob("*.png"))
@@ -32,4 +33,4 @@ class DemoCam(Camera):
 
     @property
     def unique_id(self) -> str:
-        return "Demo Cam"
+        return self._unique_id
