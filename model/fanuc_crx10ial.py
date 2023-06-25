@@ -18,11 +18,19 @@ class FanucCRX10iAL(Robot):
     def pose(self) -> np.ndarray:
         robot_http = "http://" + self.ROBOT_IP + "/KAREL/"
         url = robot_http + "remoteposition"
-        req = requests.get(url, timeout=1.0)
+        try:
+            req = requests.get(url, timeout=1.0)
+        except requests.exceptions.Timeout:
+            print(f"Can not reach robot: {self.name}")
+            exit(-1)
         jdict = json.loads(req.text)
         pose, _ = self.__parse_remote_position(jdict)
         self._pose = pose
         return super().pose
+
+    @pose.setter
+    def pose(self, pose: np.ndarray):
+        print("Cant *set* pose for robot; use move_to instead")
 
     def __parse_remote_position(self, result):
         pose = np.array(

@@ -11,13 +11,3 @@ class Robot(Entity, ABC):
     def move_to(self, pose: np.ndarray, block=True):
         """move to a pose"""
         pass
-
-    # @abstractmethod
-    # def move_to_joint(self, joint: np.ndarray, block=True):
-    #     """move to a joint"""
-    #     pass
-
-    # @abstractmethod
-    # def get_joint(self) -> np.ndarray:
-    #     """get current joint"""
-    #     pass
