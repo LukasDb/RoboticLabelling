@@ -1,7 +1,6 @@
 from .camera import Camera, CamFrame
 import numpy as np
 import cv2
-import time
 
 
 class RealsenseD415(Camera):
@@ -23,7 +22,6 @@ class RealsenseD415(Camera):
             cv2.LINE_AA,
         )
         self.frame_count += 1
-        # time.sleep(1 / 60.0)
         return CamFrame(rgb=rgb)
 
     @property

@@ -6,6 +6,7 @@ import numpy as np
 
 from model.fanuc_crx10ial import FanucCRX10iAL
 from model.camera.rs_d415 import RealsenseD415
+from model.camera.demo_cam import DemoCam
 
 
 from .view_overview import Overview
@@ -28,9 +29,12 @@ class App:
 
         crx = FanucCRX10iAL()
         cam = RealsenseD415()
+        cam2 = DemoCam()
         cam.attach(crx, np.eye(4))  # TODO load from disk?
+
         self.scene.add_robot(crx)
         self.scene.add_camera(cam)
+        self.scene.add_camera(cam2)
 
     def run(self):
         print("Running...")

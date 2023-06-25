@@ -30,7 +30,7 @@ class ViewCalibration(ttk.Frame):
         self.setup_previews()
 
         self.stop_event = threading.Event()
-        self.live_thread = threading.Thread(target=self.live_thread_fn)
+        self.live_thread = threading.Thread(target=self.live_thread_fn, daemon=True)
         self.live_thread.start()
 
     def destroy(self) -> None:
@@ -52,7 +52,7 @@ class ViewCalibration(ttk.Frame):
         )
         self.camera_selection.set(self.calibrator.selected_camera.name)
         self.camera_selection.bind(
-            "<<ComboboxSelected>>", self.calibrator.select_camera
+            "<<ComboboxSelected>>", self.on_camera_selection_change
         )
 
         self.capture_button = ttk.Button(
@@ -100,6 +100,10 @@ class ViewCalibration(ttk.Frame):
         self.live_canvas.grid(row=0, sticky=tk.NSEW)
         self.selected_image_canvas.grid(row=1, sticky=tk.NSEW)
 
+    def on_camera_selection_change(self, _):
+        selected = self.camera_selection.get()
+        self.calibrator.select_camera(selected)
+
     def update_selected_image_preview(self):
         selected = self.image_selection.get()
         try:
@@ -132,8 +136,5 @@ class ViewCalibration(ttk.Frame):
 
     def live_thread_fn(self):
         while not self.stop_event.is_set():
-            try:
-                img = self.calibrator.get_live_img()
-                self.live_canvas.set_image(img)
-            except Exception:
-                pass
+            img = self.calibrator.get_live_img()
+            self.live_canvas.set_image(img)

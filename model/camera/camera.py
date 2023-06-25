@@ -17,7 +17,7 @@ class Camera(Entity, ABC):
     def __init__(self, name: str):
         Entity.__init__(self, name)
         self._intrinsics: np.ndarray | None = None
-        self._extrinsics: np.ndarray | None = None
+        self._extrinsics: np.ndarray = np.eye(4)
         self._dist_coeffs: np.ndarray | None = None
 
     @abstractproperty

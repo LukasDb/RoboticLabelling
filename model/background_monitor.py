@@ -15,8 +15,6 @@ class BackgroundMonitor(Entity):
     def __init__(self):
         super().__init__("Background Monitor")
         # get secondary monitor info
-        self.is_setup = False
-
         self.window = tk.Toplevel()
         self.window.title("Background Monitor -> MOVE THIS WINDOW TO SECONDARY MONITOR")
 
@@ -29,11 +27,13 @@ class BackgroundMonitor(Entity):
         # move window to second screen
         self.window.geometry("640x480")
         self.window.geometry("+0+0")
+        self.setup_window(set_fullscreen=False)
 
-    def setup_window(self):
+    def setup_window(self, set_fullscreen=True):
         # get window size
         self.window.geometry("+0+0")
-        # self.window.attributes("-fullscreen", True)
+        if set_fullscreen:
+            self.window.attributes("-fullscreen", True)
         self.window.update()
         self.width = self.window.winfo_width()
         self.height = self.window.winfo_height()
@@ -63,18 +63,12 @@ class BackgroundMonitor(Entity):
             self.screen_width_m = 16 / diagonal_16_by_9 * 0.800
             self.screen_height_m = 9 / diagonal_16_by_9 * 0.800
 
-        # check for successfull fullscreen:
-        if self.width == self.screen_width and self.height == self.screen_height:
-            self.is_setup = True
-        else:
-            print("Setting window to fullscreen failed!")
-
     def set_image(self, image: np.ndarray):
         """Set the image of the background monitor"""
         self.image_tk = ImageTk.PhotoImage(image=Image.fromarray(image))
         self.canvas.itemconfig(self.image_container, image=self.image_tk)
 
-    def draw_on_rgb(self, rgb, intrinsic, dist_coeffs, cam2monitor, color = (255, 0, 0)):
+    def draw_on_rgb(self, rgb, intrinsic, dist_coeffs, cam2monitor, color=(255, 0, 0)):
         """Draw the background monitor on the rgb image"""
         half_w = self.screen_width_m / 2.0
         half_h = self.screen_height_m / 2.0
@@ -89,7 +83,6 @@ class BackgroundMonitor(Entity):
         )
         screen_corners_cam = cam2monitor @ screen_corners.T
         # screen_corners_world = self.pose @ screen_corners.T
-        rvec, tvec = get_rvec_tvec_from_affine_matrix(cam2monitor)
         img_points, _ = cv2.projectPoints(
             screen_corners_cam.T[:, :3],
             np.zeros(
@@ -110,6 +103,7 @@ class BackgroundMonitor(Entity):
             2,
         )
 
+        # rvec, tvec = get_rvec_tvec_from_affine_matrix(cam2monitor)
         # extrinsic==world2cam
         # cv2.drawFrameAxes(
         #     rgb,

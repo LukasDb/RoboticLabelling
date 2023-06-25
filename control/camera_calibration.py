@@ -3,7 +3,7 @@ import numpy as np
 from pathlib import Path
 import streamlit as st
 import cv2
-from typing import List
+from typing import List, Dict
 from model.scene import Scene
 from model.camera.camera import Camera
 from lib.geometry import *
@@ -25,6 +25,9 @@ class CameraCalibrator:
         self._scene = scene
         self.captured_images: List[np.ndarray] = []
         self.captured_robot_poses: List[np.ndarray] = []
+
+        self.calibration_results: List[Dict] = []
+
         last_cam = list(self._scene.cameras.values())[-1]
         self.selected_camera: Camera = last_cam
         self.aruco_dict = None
@@ -36,10 +39,15 @@ class CameraCalibrator:
     def load(self, path):
         with Path(path).open("rb") as f:
             cal_data = pickle.load(f)
+
+        self._scene.background.pose = cal_data["background_pose"]
         for k, c in self._scene.cameras.items():
-            c.intrinsic_matrix = cal_data[k]["intrinsic"]
-            c.dist_coeffs = cal_data[k]["dist_coeffs"]
-            c.extrinsic_matrix = cal_data[k]["extrinsic"]
+            try:
+                c.intrinsic_matrix = cal_data[k]["intrinsic"]
+                c.dist_coeffs = cal_data[k]["dist_coeffs"]
+                c.extrinsic_matrix = cal_data[k]["extrinsic"]
+            except KeyError:
+                print("No calibration data for camera: ", k)
 
     def save(self, path):
         cal_data = {
@@ -50,60 +58,28 @@ class CameraCalibrator:
             }
             for k, c in self._scene.cameras.items()
         }
+        cal_data["background_pose"] = self._scene.background.pose
         with Path(path).open("wb") as f:
             pickle.dump(cal_data, f)
 
     def setup(self):
         # TODO reset lighting
-        if not self._scene.background.is_setup:
-            self._scene.background.setup_window()
+        self._scene.background.setup_window()
         self.setup_charuco_board()
 
     def select_camera(self, camera_name):
-        cams = self._scene.cameras
+        cams = self._scene.cameras.values()
         self.selected_camera = [x for x in cams if x.name == camera_name][0]
 
     def capture_image(self):
-        # TODO actually capture image from camera
-        # TODO choose the correct robot
-
-        mock_cam = "realsense_121622061798"
-        # mock_cam = "realsense_f1120593"
-        from pathlib import Path
-
-        for img_path in Path(f"demo_data/images/{mock_cam}").glob("*.png"):
-            index = int(img_path.stem)
-            img = cv2.imread(str(img_path))
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-
-            try:
-                pose_path = Path(f"demo_data/poses/{mock_cam}/{index}.txt")
-                pose = np.loadtxt(str(pose_path))
-            except Exception:
-                pose_path = Path(f"demo_data/poses/{mock_cam}/{index:04}.txt")
-                pose = np.loadtxt(str(pose_path))
-
-            self.mock_i += 1
+        img = self.selected_camera.get_frame().rgb
+        pose = (
+            self.selected_camera.pose
+        )  # if not calibrated; then robotpose==camerapose
+        if img is not None and pose is not None:
             self.captured_images.append(img)
             self.captured_robot_poses.append(pose)
-
-        return
-        # mock_img = np.random.uniform(size=(480, 640, 3), high=255).astype(np.uint8)
-        # cv2.putText(
-        #     mock_img,
-        #     f"Captured Image {len(self.captured_images)}",
-        #     (100, 100),
-        #     cv2.FONT_HERSHEY_SIMPLEX,
-        #     1,
-        #     (0, 0, 0),
-        #     2,
-        #     cv2.LINE_AA,
-        # )
-
-        # pose = self._scene.robots[0].pose
-
-        self.captured_images.append(img)
-        self.captured_robot_poses.append(pose)
+            self.calibration_results.append({"detected": False})
 
     def calibrate(self):
         if self.aruco_dict is None:
@@ -118,8 +94,12 @@ class CameraCalibrator:
         criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 0.00001)
 
         gray = None
-        for img, pose in tqdm(
-            zip(self.captured_images, self.captured_robot_poses),
+        for img, pose, cal_result in tqdm(
+            zip(
+                self.captured_images,
+                self.captured_robot_poses,
+                self.calibration_results,
+            ),
             desc="Detecting markers",
         ):
             gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
@@ -127,9 +107,13 @@ class CameraCalibrator:
                 gray, self.aruco_dict
             )
 
+            cal_result.update(
+                {"detected": len(corners) > 0, "corners": corners, "ids": ids}
+            )
+
             if len(corners) > 0:
                 # SUB PIXEL DETECTION
-                cv2.aruco.drawDetectedMarkers(img, corners, ids)
+                # cv2.aruco.drawDetectedMarkers(img, corners, ids)
                 for corner in corners:
                     cv2.cornerSubPix(
                         gray,
@@ -151,6 +135,13 @@ class CameraCalibrator:
                     allIds.append(inter_ids)
                     allImgs.append(img)
                     allRobotPoses.append(pose)
+            else:
+                allCorners.append([])
+                allIds.append([])
+                allImgs.append(img)
+                allRobotPoses.append(pose)
+
+        assert len(allCorners) > 0, "No charuco corners detected"
 
         imsize = gray.shape
 
@@ -189,15 +180,10 @@ class CameraCalibrator:
             flags=flags,
             criteria=(cv2.TERM_CRITERIA_EPS & cv2.TERM_CRITERIA_COUNT, 10000, 1e-9),
         )
-        if ret:
-            for img, rvec, tvec in zip(allImgs, rvecs, tvecs):
-                vector6d = np.array([*tvec, *rvec])[:, 0]
-                mat = get_affine_matrix_from_6d_vector("Rodriguez", vector6d)
+        assert ret, "Calibration failed"
 
-                cam2monitor = mat @ self.markers2monitor
-                self._scene.background.draw_on_rgb(
-                    img, camera_matrix, dist_coeffs, cam2monitor, color=(255, 0, 0)
-                )
+        for cal_result, rvec, tvec in zip(self.calibration_results, rvecs, tvecs):
+            cal_result["estimated_pose6d"] = np.concatenate([tvec, rvec], axis=0)[:, 0]
 
         print("Done")
 
@@ -207,6 +193,9 @@ class CameraCalibrator:
             for tvec, rvec in zip(tvecs, rvecs)
         ]
         ret = self._optimize_handeye_matrix(camera_poses, allRobotPoses)
+        print("Done")
+        print("Optimality: ", ret["optimality"])
+        print("Cost:       ", ret["cost"])
 
         x = ret["x"]
         extrinsic_matrix = invert_homogeneous(
@@ -218,19 +207,6 @@ class CameraCalibrator:
 
         self._scene.background.pose = world2markers @ self.markers2monitor
 
-        # update montor pose and draw on frame
-        self._scene.background.pose = world2markers @ self.markers2monitor
-        for img, world2robot in zip(allImgs, allRobotPoses):
-            world2cam = world2robot @ extrinsic_matrix
-            cam2monitor = invert_homogeneous(world2cam) @ self._scene.background.pose
-            self._scene.background.draw_on_rgb(
-                img, camera_matrix, dist_coeffs, cam2monitor, color=(0, 255, 0)
-            )
-
-        print("Done")
-        print("Optimality: ", ret["optimality"])
-        print("Cost:       ", ret["cost"])
-
         # set camera atttributes
         self.selected_camera.intrinsic_matrix = camera_matrix
         self.selected_camera.dist_coeffs = dist_coeffs
@@ -240,22 +216,66 @@ class CameraCalibrator:
         monitor = self._scene.background
         cam = self.selected_camera
         frame = cam.get_frame()
+        rgb = frame.rgb
 
-        if monitor.is_setup and cam.intrinsic_matrix is not None:
+        if cam.intrinsic_matrix is not None:
             cam2monitor = invert_homogeneous(cam.pose) @ monitor.pose
             monitor.draw_on_rgb(
-                frame.rgb,
+                rgb,
                 cam.intrinsic_matrix,
                 cam.dist_coeffs,
                 cam2monitor,
             )
 
-        return frame.rgb
+        return rgb
 
     def get_selected_img(self, index) -> np.ndarray | None:
         if index is None:
             return None
-        return self.captured_images[index]
+
+        monitor = self._scene.background
+        cam = self.selected_camera
+
+        img = self.captured_images[index].copy()
+
+        if cam.intrinsic_matrix is None:
+            return img
+
+        # draw optimized calibration result
+        world2robot = self.captured_robot_poses[index]
+        world2cam = world2robot @ cam.extrinsic_matrix
+        cam2monitor = invert_homogeneous(world2cam) @ monitor.pose
+        monitor.draw_on_rgb(
+            img,
+            cam.intrinsic_matrix,
+            cam.dist_coeffs,
+            cam2monitor,
+            color=(0, 255, 0),
+        )
+
+        cal_result = self.calibration_results[index]
+        if not cal_result["detected"]:
+            return img
+
+        corners = cal_result["corners"]
+        ids = cal_result["ids"]
+        pose6d = cal_result["estimated_pose6d"]
+
+        if len(corners) > 0:
+            cv2.aruco.drawDetectedMarkers(img, corners, ids)
+
+        # draw per-image calibration result
+        mat = get_affine_matrix_from_6d_vector("Rodriguez", pose6d)
+        cam2monitor = mat @ self.markers2monitor
+        monitor.draw_on_rgb(
+            img,
+            cam.intrinsic_matrix,
+            cam.dist_coeffs,
+            cam2monitor,
+            color=(255, 0, 0),
+        )
+
+        return img
 
     def setup_charuco_board(self):
         width = self._scene.background.screen_width
