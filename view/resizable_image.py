@@ -34,13 +34,13 @@ class ResizableImage(tk.Canvas):
 
         self._img_tk = ImageTk.PhotoImage(Image.fromarray(img_resized))
         self.itemconfig(self._canvas_img, image=self._img_tk)  # , anchor=tk.CENTER)
-        # self.moveto(self._canvas_img, canvas_center[0], canvas_center[1])
 
     def set_image(self, image):
         self._img = image.copy()
+        if self._canvas_img not in self.children:
+            self._canvas_img = self.create_image(0, 0, anchor=tk.NW)
         self._on_resize()  # resize to canvas
 
     def clear_image(self):
         if self.winfo_exists():
-            del self._img_tk
-            del self._img
+            self.delete(self._canvas_img)

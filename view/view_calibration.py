@@ -137,4 +137,7 @@ class ViewCalibration(ttk.Frame):
     def live_thread_fn(self):
         while not self.stop_event.is_set():
             img = self.calibrator.get_live_img()
-            self.live_canvas.set_image(img)
+            if img is not None:
+                self.live_canvas.set_image(img)
+            else:
+                self.live_canvas.clear_image()
