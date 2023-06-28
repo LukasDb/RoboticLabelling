@@ -6,6 +6,7 @@ import numpy as np
 
 from model.fanuc_crx10ial import FanucCRX10iAL
 from model.camera.realsense import Realsense
+from model.camera.zed import ZedCamera
 from model.camera.demo_cam import DemoCam
 
 
@@ -35,17 +36,13 @@ class App:
             self.scene.add_camera(cam)
             cam.attach(crx, np.eye(4))
 
-        # add demo cameras
+        for cam in ZedCamera.get_available_devices():
+            self.scene.add_camera(cam)
+            cam.attach(crx, np.eye(4))
+
+        # add demo cam
         self.scene.add_camera(DemoCam("Demo Cam"))
-        c1 = DemoCam("demo_cam_1")
-        c1.attach(crx, np.eye(4))
-        self.scene.add_camera(c1)
-        self.scene.add_camera(DemoCam("demo_cam_2"))
-        self.scene.add_camera(DemoCam("demo_cam_3"))
-        self.scene.add_camera(DemoCam("demo_cam_4"))
-        self.scene.add_camera(DemoCam("demo_cam_5"))
-        self.scene.add_camera(DemoCam("demo_cam_6"))
-        self.scene.add_camera(DemoCam("demo_cam_7"))
+        
 
     def run(self):
         print("Running...")
