@@ -7,6 +7,7 @@ import numpy as np
 import cv2
 from view.resizable_image import ResizableImage
 import threading
+import time
 
 
 class ViewCalibration(ttk.Frame):
@@ -135,8 +136,16 @@ class ViewCalibration(ttk.Frame):
         self.selected_image_canvas.clear_image()
 
     def live_thread_fn(self):
+        t_previous = time.perf_counter()
+        FPS = 20
         while not self.stop_event.is_set():
+            t = time.perf_counter()
+            if (t - t_previous) < 1 / FPS:  # 30 FPS
+                time.sleep(1 / FPS - (t - t_previous))
+            t_previous = time.perf_counter()
+
             img = self.calibrator.get_live_img()
+
             if img is not None:
                 self.live_canvas.set_image(img)
             else:

@@ -5,7 +5,7 @@ This repository contains our application to generate labelled datasets, intended
 - Python 3.10
 - `pip install -r requirements.txt`
 - start with `bash run_app.sh` or `streamlit run main.py`
-- Install the ZED SDK according to their install instructions
+- Install the ZED SDK according to their install instructions and the Python API (Keep in mind the USB type C socket of the camera is not reversible)
 
 ## Semantics and general info
 - *Objects* are things, with annotations and therefore 3D scanned or modelled digital twins.
