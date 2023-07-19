@@ -13,6 +13,7 @@ from model.camera.zed import ZedCamera
 from model.camera.demo_cam import DemoCam
 
 from control.camera_calibration import CameraCalibrator
+from control.pose_registrator import PoseRegistrator
 
 from .view_overview import Overview
 from .view_calibration import ViewCalibration
@@ -29,31 +30,13 @@ class App:
     def __init__(self) -> None:
         self.root = tk.Tk()
         self.root.title("Robotic Labelling")
-
-        ## Assemble scene
         self.scene = Scene()
-
-        crx = FanucCRX10iAL()
-        self.scene.add_robot(crx)
-
-        mock_robot = MockRobot()
-        self.scene.add_robot(mock_robot)
-
-        # find connected realsense devices
-        for cam in Realsense.get_available_devices():
-            self.scene.add_camera(cam)
-
-        for cam in ZedCamera.get_available_devices():
-            self.scene.add_camera(cam)
-
-        # add demo cam
-        self.scene.add_camera(DemoCam("Demo Cam"))
-
-        # load controllers
+        # --- load controllers ---
         self.calibrator = CameraCalibrator(self.scene)
+        self.pose_registrator = PoseRegistrator()
 
-    def run(self):
-        print("Running...")
+
+        ## ---  build GUI ---
         self.menubar = tk.Menu(self.root)
         self.filemenu = tk.Menu(self.menubar, tearoff=0)
         # add save menu
@@ -76,12 +59,31 @@ class App:
         self.cal = ViewCalibration(tabs, self.scene, self.calibrator)
         tabs.add(self.cal, text="1. Camera Calibration")
 
-        reg = ViewPoseRegistration(tabs, self.scene)
+        reg = ViewPoseRegistration(tabs, self.scene, self.pose_registrator)
         tabs.add(reg, text="2. Pose Registration")
 
         acq = ViewAcquisition(tabs, self.scene)
         tabs.add(acq, text="3. Acquisition")
 
+        ## --- Assemble scene ---
+        # for testing
+        mock_robot = MockRobot()
+        self.scene.add_robot(mock_robot)
+        self.scene.add_camera(DemoCam("Demo Cam"))
+
+        crx = FanucCRX10iAL()
+        self.scene.add_robot(crx)
+
+        # find connected realsense devices
+        for cam in Realsense.get_available_devices():
+            self.scene.add_camera(cam)
+
+        for cam in ZedCamera.get_available_devices():
+            self.scene.add_camera(cam)
+
+
+    def run(self):
+        print("Running...")
         tk.mainloop()
 
     def _on_load_calib(self):

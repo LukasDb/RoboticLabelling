@@ -54,6 +54,7 @@ class Camera(Entity, Subject, ABC):
             self._intrinsics = intrinsic_matrix
             self._dist_coeffs = dist_coeffs
             self._link_matrix = extrinsic_matrix
+
         self.notify(Event.CAMERA_CALIBRATED)
 
     @abstractmethod

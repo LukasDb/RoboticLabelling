@@ -1,22 +1,25 @@
 import tkinter as tk
 from tkinter import ttk
 from PIL import ImageTk, Image
-from model.scene import Scene
-from control.camera_calibration import CameraCalibrator
 import numpy as np
 import cv2
-from view.resizable_image import ResizableImage
 import threading
 import time
 
+from model.scene import Scene
+from model.observer import Observer, Event
+from view.resizable_image import ResizableImage
+from control.camera_calibration import CameraCalibrator
 
-class ViewCalibration(ttk.Frame):
+
+class ViewCalibration(Observer, ttk.Frame):
     PREVIEW_WIDTH = 640
     PREVIEW_HEIGHT = 480
 
     def __init__(self, parent, scene: Scene, calibrator: CameraCalibrator) -> None:
         ttk.Frame.__init__(self, parent)
         self.scene = scene
+        self.listen_to(self.scene)
         self.calibrator = calibrator
 
         self.title = ttk.Label(self, text="1. Camera Calibration")
@@ -32,6 +35,10 @@ class ViewCalibration(ttk.Frame):
         self.stop_event = threading.Event()
         self.live_thread = threading.Thread(target=self.live_thread_fn, daemon=True)
         self.live_thread.start()
+
+    def update_observer(self, subject, event: Event, *args, **kwargs):
+        if event == Event.CAMERA_ADDED:
+            self.setup_controls()
 
     def destroy(self) -> None:
         self.stop_event.set()
@@ -50,7 +57,7 @@ class ViewCalibration(ttk.Frame):
         self.camera_selection = ttk.Combobox(
             self.control_frame, values=[c.name for c in self.scene.cameras.values()]
         )
-        self.camera_selection.set(self.calibrator.selected_camera.name)
+        self.camera_selection.set("")
         self.camera_selection.bind(
             "<<ComboboxSelected>>", self.on_camera_selection_change
         )

@@ -6,14 +6,13 @@ from scipy.spatial.transform import Rotation as R
 
 
 class ViewPoseRegistration(ttk.Frame):
-    def __init__(self, parent, scene: Scene) -> None:
+    def __init__(self, parent, scene: Scene, registrator: PoseRegistrator) -> None:
         super().__init__(parent)
         self.scene = scene
+        self.registrator = registrator
 
         self.title = ttk.Label(self, text="2. Pose Registration")
         self.title.grid()
-
-        self.registrator = registrator = PoseRegistrator()
 
         self.camera_selection = ttk.Combobox(
             self, values=[c.name for c in self.scene.cameras.values()]

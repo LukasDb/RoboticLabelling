@@ -28,8 +28,7 @@ class CameraCalibrator:
 
         self.calibration_results: List[Dict] = []
 
-        last_cam = list(self._scene.cameras.values())[0]
-        self.selected_camera: Camera = last_cam
+        self.selected_camera: Camera = None
         self.aruco_dict = None
         self.charuco_board = None
         self.markers2monitor = np.eye(4)
@@ -218,6 +217,8 @@ class CameraCalibrator:
     def get_live_img(self) -> np.ndarray | None:
         monitor = self._scene.background
         cam = self.selected_camera
+        if cam is None:
+            return None
         frame = cam.get_frame()
         rgb = frame.rgb
 
