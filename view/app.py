@@ -11,6 +11,7 @@ from model.demo_robot import MockRobot
 from model.camera.realsense import Realsense
 from model.camera.zed import ZedCamera
 from model.camera.demo_cam import DemoCam
+from model.labelled_object import LabelledObject
 
 from control.camera_calibration import CameraCalibrator
 from control.pose_registrator import PoseRegistrator
@@ -35,7 +36,6 @@ class App:
         self.calibrator = CameraCalibrator(self.scene)
         self.pose_registrator = PoseRegistrator()
 
-
         ## ---  build GUI ---
         self.menubar = tk.Menu(self.root)
         self.filemenu = tk.Menu(self.menubar, tearoff=0)
@@ -45,6 +45,10 @@ class App:
         self.filemenu.add_separator()
         self.filemenu.add_command(label="Exit", command=self.root.quit)
         self.menubar.add_cascade(label="File", menu=self.filemenu)
+
+        self.objectmenu = tk.Menu(self.menubar, tearoff=0)
+        self.objectmenu.add_command(label="Add Object", command=self._on_add_object)
+        self.menubar.add_cascade(label="Object", menu=self.objectmenu)
 
         self.root.config(menu=self.menubar)
 
@@ -81,7 +85,6 @@ class App:
         for cam in ZedCamera.get_available_devices():
             self.scene.add_camera(cam)
 
-
     def run(self):
         print("Running...")
         tk.mainloop()
@@ -109,3 +112,17 @@ class App:
 
         with Path(file.name).open("wb") as f:
             pickle.dump(data, f)
+
+    def _on_add_object(self):
+        file = filedialog.askopenfile(
+            title="Select Object Ply file",
+            filetypes=(("ply files", "*.ply"), ("all files", "*.*")),
+        )
+
+        if file is None:
+            return
+
+        path = Path(file.name)
+
+        new_object = LabelledObject(path.stem, path)
+        self.scene.add_object(new_object)

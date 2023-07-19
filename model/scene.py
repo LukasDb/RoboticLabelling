@@ -1,7 +1,7 @@
 from typing import List, Dict
 
 from model.observer import Subject, Event
-from model.labelled_object import Labelledobject
+from model.labelled_object import LabelledObject
 from model.robot import Robot
 from model.camera.camera import Camera
 from model.background_monitor import BackgroundMonitor
@@ -10,7 +10,7 @@ from model.background_monitor import BackgroundMonitor
 class Scene(Subject):
     def __init__(self) -> None:
         Subject.__init__(self)
-        self.objects: Dict[str, Labelledobject] = {}
+        self.objects: Dict[str, LabelledObject] = {}
         self.robots: Dict[str, Robot] = {}
         self.cameras: Dict[str, Camera] = {}
         self.background = BackgroundMonitor()
@@ -24,6 +24,6 @@ class Scene(Subject):
         self.robots.update({robot.name: robot})
         self.notify(Event.ROBOT_ADDED, robot=robot)
 
-    def add_object(self, obj: Labelledobject):
+    def add_object(self, obj: LabelledObject):
         self.objects.update({obj.name: obj})
         self.notify(Event.OBJECT_ADDED, object=obj)
