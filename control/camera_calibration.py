@@ -36,38 +36,36 @@ class CameraCalibrator:
 
         self.mock_i = 0
 
-    def load(self, path):
-        with Path(path).open("rb") as f:
-            cal_data = pickle.load(f)
-
+    def load(self, cal_data: Dict):
+        """load calibration from config dict"""
         self._scene.background.pose = cal_data["background_pose"]
-        c = self.selected_camera
 
-        try:
-            intrinsic_matrix = cal_data[c.unique_id]["intrinsic"]
-            dist_coeffs = cal_data[c.unique_id]["dist_coeffs"]
-            extrinsic_matrix = cal_data[c.unique_id]["extrinsic"]
-            parent = cal_data[c.unique_id]["attached_to"]
-            if parent != "none":
-                c.attach(self._scene.robots[parent], extrinsic_matrix)
-            c.set_calibration(intrinsic_matrix, dist_coeffs, extrinsic_matrix)
-        except KeyError:
-            print("No calibration data for this camera")
+        for c in self._scene.cameras.values():
+            try:
+                intrinsic_matrix = cal_data[c.unique_id]["intrinsic"]
+                dist_coeffs = cal_data[c.unique_id]["dist_coeffs"]
+                extrinsic_matrix = cal_data[c.unique_id]["extrinsic"]
+                parent = cal_data[c.unique_id]["attached_to"]
+                if parent != "none":
+                    c.attach(self._scene.robots[parent], extrinsic_matrix)
+                c.set_calibration(intrinsic_matrix, dist_coeffs, extrinsic_matrix)
+            except KeyError:
+                print("No calibration data for camera", c.unique_id)
 
-    def save(self, path):
-        c = self.selected_camera
+    def dump(self) -> Dict:
+        """dump calibration as config dict"""
         cal_data = {
             c.unique_id: {
                 "intrinsic": c.intrinsic_matrix,
                 "dist_coeffs": c.dist_coeffs,
                 "extrinsic": c._link_matrix,
                 "attached_to": "none" if c.parent is None else c.parent.name,
-            },
-            "background_pose": self._scene.background.pose,
+            }
+            for c in self._scene.cameras.values()
         }
 
-        with Path(path).open("wb") as f:
-            pickle.dump(cal_data, f)
+        cal_data.update({"background_pose": self._scene.background.pose})
+        return cal_data
 
     def setup(self):
         # TODO reset lighting
@@ -80,9 +78,7 @@ class CameraCalibrator:
 
     def capture_image(self):
         img = self.selected_camera.get_frame().rgb
-        pose = (
-            self.selected_camera.pose
-        )  # if not calibrated; then robotpose==camerapose
+        pose = self.selected_camera.parent.pose
         if img is not None and pose is not None:
             self.captured_images.append(img)
             self.captured_robot_poses.append(pose)

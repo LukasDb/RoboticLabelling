@@ -21,7 +21,6 @@ class Camera(Entity, Subject, ABC):
         Entity.__init__(self, name)
         Subject.__init__(self)
         self._intrinsics: np.ndarray | None = None
-        self._extrinsics: np.ndarray = np.eye(4)
         self._dist_coeffs: np.ndarray | None = None
 
     @abstractproperty
@@ -35,7 +34,7 @@ class Camera(Entity, Subject, ABC):
 
     @property
     def extrinsic_matrix(self):
-        return self._extrinsics
+        return self._link_matrix
 
     @property
     def dist_coeffs(self):
@@ -54,7 +53,7 @@ class Camera(Entity, Subject, ABC):
         with self.lock:
             self._intrinsics = intrinsic_matrix
             self._dist_coeffs = dist_coeffs
-            self._extrinsics = extrinsic_matrix
+            self._link_matrix = extrinsic_matrix
         self.notify(Event.CAMERA_CALIBRATED)
 
     @abstractmethod

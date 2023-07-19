@@ -8,7 +8,7 @@ from model.background_monitor import BackgroundMonitor
 
 class Scene:
     def __init__(self) -> None:
-        self.objects: List[Labelledobject] = []
+        self.objects: Dict[str, Labelledobject] = {}
         self.robots: Dict[str, Robot] = {}
         self.cameras: Dict[str, Camera] = {}
         self.background = BackgroundMonitor()
@@ -21,4 +21,4 @@ class Scene:
         self.robots.update({robot.name: robot})
 
     def add_object(self, obj: Labelledobject):
-        self.objects.append(obj)
+        self.objects.update({obj.name: obj})

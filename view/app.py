@@ -1,14 +1,18 @@
 import tkinter as tk
-import tkinter.filedialog as filedialog
 from tkinter import ttk
-from model.scene import Scene
+import tkinter.filedialog as filedialog
 import numpy as np
+import pickle
+from pathlib import Path
 
+from model.scene import Scene
 from model.fanuc_crx10ial import FanucCRX10iAL
+from model.demo_robot import MockRobot
 from model.camera.realsense import Realsense
 from model.camera.zed import ZedCamera
 from model.camera.demo_cam import DemoCam
 
+from control.camera_calibration import CameraCalibrator
 
 from .view_overview import Overview
 from .view_calibration import ViewCalibration
@@ -26,34 +30,35 @@ class App:
         self.root = tk.Tk()
         self.root.title("Robotic Labelling")
 
+        ## Assemble scene
         self.scene = Scene()
 
         crx = FanucCRX10iAL()
         self.scene.add_robot(crx)
 
+        mock_robot = MockRobot()
+        self.scene.add_robot(mock_robot)
+
         # find connected realsense devices
         for cam in Realsense.get_available_devices():
             self.scene.add_camera(cam)
-            cam.attach(crx, np.eye(4))
 
         for cam in ZedCamera.get_available_devices():
             self.scene.add_camera(cam)
-            cam.attach(crx, np.eye(4))
 
         # add demo cam
         self.scene.add_camera(DemoCam("Demo Cam"))
-        
+
+        # load controllers
+        self.calibrator = CameraCalibrator(self.scene)
 
     def run(self):
         print("Running...")
         self.menubar = tk.Menu(self.root)
         self.filemenu = tk.Menu(self.menubar, tearoff=0)
-        self.filemenu.add_command(
-            label="Load Calibration...", command=self.on_menu_load_calib
-        )
-        self.filemenu.add_command(
-            label="Save Calibration as...", command=self.on_menu_save_calib
-        )
+        # add save menu
+        self.filemenu.add_command(label="Save...", command=self._on_save_calib)
+        self.filemenu.add_command(label="Load...", command=self._on_load_calib)
         self.filemenu.add_separator()
         self.filemenu.add_command(label="Exit", command=self.root.quit)
         self.menubar.add_cascade(label="File", menu=self.filemenu)
@@ -68,7 +73,7 @@ class App:
         self.overview = Overview(tabs, self.scene)
         tabs.add(self.overview, text="Overview")
 
-        self.cal = ViewCalibration(tabs, self.scene)
+        self.cal = ViewCalibration(tabs, self.scene, self.calibrator)
         tabs.add(self.cal, text="1. Camera Calibration")
 
         reg = ViewPoseRegistration(tabs, self.scene)
@@ -79,20 +84,26 @@ class App:
 
         tk.mainloop()
 
-    def on_menu_load_calib(self):
+    def _on_load_calib(self):
         file = filedialog.askopenfile(
-            title="Select Calibration file",
-            filetypes=(("calibration files", "*.cal"), ("all files", "*.*")),
+            title="Select Configuration file",
+            filetypes=(("configuration files", "*.config"), ("all files", "*.*")),
         )
-        self.cal.calibrator.load(file.name)
+        with Path(file.name).open("rb") as f:
+            data = pickle.load(f)
 
-    def on_menu_save_calib(self):
-        default_name = self.cal.calibrator.selected_camera.name.replace(" ", "_")
+        self.calibrator.load(data["camera_calibration"])
+
+    def _on_save_calib(self):
+        default_name = "scene"
 
         file = filedialog.asksaveasfile(
-            title="Save Calibration file",
-            filetypes=(("calibration files", "*.cal"), ("all files", "*.*")),
-            defaultextension=".cal",
+            title="Save Configuration file",
+            filetypes=(("configuration files", "*.config"), ("all files", "*.*")),
+            defaultextension=".config",
             initialfile=default_name,
         )
-        self.cal.calibrator.save(file.name)
+        data = {"camera_calibration": self.calibrator.dump()}
+
+        with Path(file.name).open("wb") as f:
+            pickle.dump(data, f)

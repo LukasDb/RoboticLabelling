@@ -1,13 +1,11 @@
 from .entity import Entity
 import open3d as o3d
+from pathlib import Path
 
 
 class Labelledobject(Entity):
-    def __init__(self, mesh):
-        super().__init__()
+    def __init__(self, name, mesh_path: Path):
+        super().__init__(name=name)
+        mesh = o3d.io.read_triangle_mesh(str(mesh_path.resolve()))
+        self.mesh_path = mesh_path
         self._mesh = mesh
-
-    @staticmethod
-    def from_obj(obj_path: str):
-        mesh = o3d.io.read_triangle_mesh(obj_path)
-        return Labelledobject(mesh)

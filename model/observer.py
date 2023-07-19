@@ -16,7 +16,7 @@ class Subject:
 
     def notify(self, event: Event, *args, **kwargs):
         for observer in self.__observers:
-            observer.update(self, event, *args, **kwargs)
+            observer.notify(self, event, *args, **kwargs)
 
 
 class Observer:
@@ -27,5 +27,5 @@ class Observer:
     def listen_to(self, subject: Subject):
         subject.register(self)
 
-    def update(self, subject: Subject, event: Event, *args, **kwargs):
+    def notify(self, subject: Subject, event: Event, *args, **kwargs):
         pass

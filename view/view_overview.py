@@ -36,8 +36,12 @@ class Overview(Observer, tk.Frame):
 
         self.robot_check = self.setup_robot_pose()
         self.bg_setup = self.setup_background_window()
+
         self._cam_rows: Dict[str, Dict] = {}
         self.cam_overview = self.setup_camera_table()
+
+        self._object_rows: Dict[str, Dict] = {}
+        self.object_overview = self.setup_object_table()
 
         self.manual = tk.Label(self, text=manual_text)
 
@@ -47,9 +51,10 @@ class Overview(Observer, tk.Frame):
         self.robot_check.grid()
         self.bg_setup.grid()
         self.cam_overview.grid(sticky=tk.NSEW, pady=(10, 10))
+        self.object_overview.grid(sticky=tk.NSEW, pady=(10, 10))
         self.manual.grid()
 
-    def update(self, subject, event: Event, *args, **kwargs):
+    def notify(self, subject, event: Event, *args, **kwargs):
         if event == Event.CAMERA_CALIBRATED or event == Event.CAMERA_ATTACHED:
             # update calibrated column
             self._update_cam_row(subject.unique_id)
@@ -110,6 +115,49 @@ class Overview(Observer, tk.Frame):
 
         return self.cam_overview
 
+    def setup_object_table(self):
+        self.object_overview = tk.Frame(self)
+        self.object_overview.columnconfigure(0, weight=1)
+
+        columns = ["Object", "Plyfile"]
+        headings = tk.Frame(self.object_overview)
+        headings.grid(row=0, column=0, sticky=tk.EW)
+        for i, c in enumerate(columns):
+            headings.columnconfigure(i, weight=1)
+            label = tk.Label(headings, text=c)
+            label.grid(row=0, column=i, sticky=tk.EW)
+        # add separator
+        sep = ttk.Separator(self.object_overview, orient=tk.HORIZONTAL)
+        sep.grid(row=1, column=0, sticky=tk.EW)
+
+        self.object_table = tk.Frame(self.object_overview)
+        self.object_table.columnconfigure(0, weight=1)
+        self.object_table.grid(row=2, column=0, sticky=tk.NSEW)
+
+        for i, c in enumerate(self._scene.objects.values()):
+            row = tk.Frame(self.object_table)
+            row.grid(row=i, column=0, sticky=tk.EW, pady=(5, 5))
+
+            row.columnconfigure(0, weight=1)
+            row.columnconfigure(1, weight=1)
+
+            # add object name
+            obj_name = tk.Label(row)
+            obj_name.grid(row=0, column=0, sticky=tk.EW)
+            # add pose
+            plyfile = tk.Label(row)
+            plyfile.grid(row=0, column=1, sticky=tk.EW)
+
+            self._object_rows[c.name] = {
+                "obj_name": obj_name,
+                "plyfile": plyfile,
+            }
+
+            # update values
+            self._update_object_row(c.name)
+
+        return self.object_overview
+
     def on_attach_cam(self, cam_unique_id, parent):
         if parent.get() == "-":
             self._scene.cameras[cam_unique_id].detach()
@@ -130,6 +178,12 @@ class Overview(Observer, tk.Frame):
         )
         row["parent"].set("-" if cam.parent is None else cam.parent.name)
         # row["parent"].configure(text="-" if cam.parent is None else cam.parent.name)
+
+    def _update_object_row(self, obj_name):
+        obj = self._scene.objects[obj_name]
+        row = self._object_rows[obj_name]
+        row["obj_name"].configure(text=f"{obj.name}")
+        row["plyfile"].configure(text=f"{str(obj.mesh_path)}")
 
     def setup_background_window(self):
         # add button with a label to "Setup up background monitor"

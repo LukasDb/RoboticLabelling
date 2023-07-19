@@ -14,9 +14,10 @@ class ViewCalibration(ttk.Frame):
     PREVIEW_WIDTH = 640
     PREVIEW_HEIGHT = 480
 
-    def __init__(self, parent, scene: Scene) -> None:
+    def __init__(self, parent, scene: Scene, calibrator: CameraCalibrator) -> None:
         ttk.Frame.__init__(self, parent)
         self.scene = scene
+        self.calibrator = calibrator
 
         self.title = ttk.Label(self, text="1. Camera Calibration")
         self.title.grid(row=0, column=0, columnspan=2)
@@ -24,8 +25,6 @@ class ViewCalibration(ttk.Frame):
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=0, minsize=200)
         self.rowconfigure(1, weight=1)
-
-        self.calibrator = CameraCalibrator(self.scene)
 
         self.setup_controls()
         self.setup_previews()
@@ -77,12 +76,13 @@ class ViewCalibration(ttk.Frame):
             command=self.on_calibrate,
         )
 
-        self.btn_setup.grid(row=0)
-        self.camera_selection.grid(row=1)
-        self.capture_button.grid(row=2)
-        self.clear_button.grid(row=3)
-        self.image_selection.grid(row=4)
-        self.calibrate_button.grid(row=5)
+        pady = 5
+        self.btn_setup.grid(pady=pady)
+        self.camera_selection.grid(pady=pady)
+        self.capture_button.grid(pady=pady)
+        self.clear_button.grid(pady=pady)
+        self.image_selection.grid(pady=pady)
+        self.calibrate_button.grid(pady=pady)
 
     def setup_previews(self):
         self.preview_frame = ttk.Frame(self)
