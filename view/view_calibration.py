@@ -11,15 +11,13 @@ from control.camera_calibration import CameraCalibrator
 from view.resizable_image import ResizableImage
 
 
-
-class ViewCalibration(Observer, ttk.Frame):
+class ViewCalibration(ttk.Frame):
     PREVIEW_WIDTH = 640
     PREVIEW_HEIGHT = 480
 
     def __init__(self, parent, scene: Scene, calibrator: CameraCalibrator) -> None:
         ttk.Frame.__init__(self, parent)
         self.scene = scene
-        self.listen_to(self.scene)
         self.calibrator = calibrator
 
         self.title = ttk.Label(self, text="1. Camera Calibration")
@@ -29,41 +27,38 @@ class ViewCalibration(Observer, ttk.Frame):
         self.columnconfigure(1, weight=0, minsize=200)
         self.rowconfigure(1, weight=1)
 
-        self.setup_controls()
-        self.setup_previews()
+        self.control_frame = self.setup_controls(self)
+        self.preview_frame = self.setup_previews()
 
+        self.control_frame.grid(row=1, column=1, sticky=tk.NSEW)
+        self.preview_frame.grid(row=1, column=0, sticky=tk.NSEW)
 
-    def update_observer(self, subject, event: Event, *args, **kwargs):
-        if event == Event.CAMERA_ADDED:
-            self.setup_controls()
-
-    def setup_controls(self):
-        self.control_frame = ttk.Frame(self)
-        self.control_frame.grid(row=1, column=1, sticky=tk.NE)
+    def setup_controls(self, parent):
+        control_frame = ttk.Frame(parent)
 
         self.btn_setup = ttk.Button(
-            self.control_frame,
+            control_frame,
             text="Setup",
             command=self.calibrator.setup,
         )
 
         self.capture_button = ttk.Button(
-            self.control_frame, text="Capture Image", command=self.on_capture
+            control_frame, text="Capture Image", command=self.on_capture
         )
 
         self.clear_button = ttk.Button(
-            self.control_frame,
+            control_frame,
             text="Delete Captured Images",
             command=self.on_delete,
         )
 
-        self.image_selection = ttk.Combobox(self.control_frame)
+        self.image_selection = ttk.Combobox(control_frame)
         self.image_selection.bind(
             "<<ComboboxSelected>>", lambda _: self.update_selected_image_preview()
         )
 
         self.calibrate_button = ttk.Button(
-            self.control_frame,
+            control_frame,
             text="Calibrate Intrinsics & Hand-Eye",
             command=self.on_calibrate,
         )
@@ -75,17 +70,15 @@ class ViewCalibration(Observer, ttk.Frame):
         self.image_selection.grid(pady=pady)
         self.calibrate_button.grid(pady=pady)
 
+        return control_frame
+
     def setup_previews(self):
-        self.preview_frame = ttk.Frame(self)
-        self.preview_frame.grid(row=1, column=0, sticky=tk.NSEW)
-        self.preview_frame.rowconfigure(0, weight=1)
-        self.preview_frame.rowconfigure(1, weight=1)
-        self.preview_frame.columnconfigure(0, weight=1)
-
-        self.selected_image_canvas = ResizableImage(self.preview_frame, bg="#000000")
-
-        self.selected_image_canvas.grid(row=1, sticky=tk.NSEW)
-
+        preview_frame = ttk.Frame(self)
+        preview_frame.rowconfigure(0, weight=1)
+        preview_frame.columnconfigure(0, weight=1)
+        self.selected_image_canvas = ResizableImage(preview_frame, bg="#000000")
+        self.selected_image_canvas.grid(sticky=tk.NSEW)
+        return preview_frame
 
     def update_selected_image_preview(self):
         selected = self.image_selection.get()
@@ -116,4 +109,3 @@ class ViewCalibration(Observer, ttk.Frame):
         self.image_selection["values"] = []
         self.image_selection.set("")
         self.selected_image_canvas.clear_image()
-
