@@ -14,14 +14,10 @@ class ViewPoseRegistration(ttk.Frame):
         self.title = ttk.Label(self, text="2. Pose Registration")
         self.title.grid()
 
-        self.camera_selection = ttk.Combobox(
-            self, values=[c.name for c in self.scene.cameras.values()]
-        )
-        self.camera_selection.grid()
-
         self.object_selection = ttk.Combobox(
-            self, values=[o.name for o in self.scene.objects]
+            self, values=[o.name for o in self.scene.objects.values()]
         )
+
         self.object_selection.grid()
 
         self.position = tk.Label(self)
@@ -29,6 +25,12 @@ class ViewPoseRegistration(ttk.Frame):
 
         self.orientation = tk.Label(self)
         self.orientation.grid()
+
+        # add button
+        self.update_button = ttk.Button(
+            self, text="Optimize", command=lambda: registrator.optimize_pose()
+        )
+        self.update_button.grid()
 
         # self.update_button = ttk.Button(
         #     self, text="Update", command=registrator.update_pose
@@ -38,12 +40,6 @@ class ViewPoseRegistration(ttk.Frame):
         # self.reset_button = ttk.Button(
         #     self, text="Reset", command=registrator.reset_pose
         # )
-
-        self.live_preview = tk.Label(self)
-        self.live_preview.grid()
-
-        self.selected_image = tk.Label(self)
-        self.selected_image.grid()
 
         # st.title("2. Pose Registration")
         # c1, c2 = st.columns(2)
@@ -90,38 +86,3 @@ class ViewPoseRegistration(ttk.Frame):
         # t_rot[1].number_input(
         #     "ψ", key="reg_ψ", on_change=update_rot, step=5.0, format="%.1f"
         # )
-
-        # c2.divider
-        # pose_controls = c2.columns(2)
-        # if pose_controls[0].button("Optimize Pose"):
-        #     registrator.optimize_pose()
-        # if pose_controls[1].button("Reset Pose"):
-        #     registrator.reset()
-        #     st.experimental_rerun()
-
-        # c2.divider()
-        # img_control = c2.columns(2)
-        # if img_control[0].button("Capture Image"):
-        #     registrator.capture_image()
-
-        # if img_control[1].button("Delete Captured Images"):
-        #     registrator.clear_cache()
-
-        # sel_img_index = c2.radio(
-        #     "Captured Images",
-        #     list(range(len(registrator._captured_images))),
-        #     format_func=lambda x: f"Image {x:2}",
-        # )
-
-        # live = registrator.get_live_img()
-        # sel_img = registrator.get_selected_img(sel_img_index)
-
-        # c1.image(
-        #     live,
-        #     caption="Live preview",
-        # )
-        # if sel_img is not None:
-        #     c1.image(
-        #         sel_img,
-        #         caption="Selected Image",
-        #     )

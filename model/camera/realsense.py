@@ -3,6 +3,7 @@ import numpy as np
 from typing import List
 import cv2
 import pyrealsense2 as rs
+import logging
 
 
 class Realsense(Camera):
@@ -17,7 +18,7 @@ class Realsense(Camera):
         devices = ctx.query_devices()
         cams = []
         for dev in devices:
-            print("Found device: ", dev.get_info(rs.camera_info.name))
+            logging.info(f"Found device: {dev.get_info(rs.camera_info.name)}")
             serial_number = dev.get_info(rs.camera_info.serial_number)
             cams.append(Realsense(serial_number))
         return cams
@@ -34,7 +35,7 @@ class Realsense(Camera):
         try:
             pipeline_profile = config.resolve(pipeline_wrapper)
         except RuntimeError:
-            print(
+            logging.error(
                 "Realsense Device is not connected. Please connect the device and try again."
             )
             exit()
@@ -70,7 +71,7 @@ class Realsense(Camera):
             self._pipeline.start(self._config)
             self.is_started = True
         except RuntimeError:
-            print(f"Could not start camera stream ({self.name})")
+            logging.error(f"Could not start camera stream ({self.name})")
 
     def get_frame(self) -> CamFrame:
         output = CamFrame()
@@ -83,7 +84,7 @@ class Realsense(Camera):
         color_frame = frames.get_color_frame()
         depth_frame = frames.get_depth_frame()
         if not depth_frame or not color_frame:
-            print("Could not get camera frame")
+            logging.warn("Could not get camera frame")
             return output
 
         if self.is_hq_depth:

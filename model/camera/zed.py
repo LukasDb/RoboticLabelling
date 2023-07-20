@@ -3,6 +3,7 @@ import numpy as np
 from typing import List
 import cv2
 import pyzed.sl as sl
+import logging
 
 
 class ZedCamera(Camera):
@@ -14,13 +15,13 @@ class ZedCamera(Camera):
     @staticmethod
     def get_available_devices() -> List["ZedCamera"]:
         cams = []
-        print("Getting ZED devices...")
-        print(
+        logging.info("Getting ZED devices...")
+        logging.warn(
             "If you get segmentation fault here, reverse the USB type C cable on the ZED camera."
         )
         dev_list = sl.Camera.get_device_list()
         for dev in dev_list:  # list[DeviceProperties]
-            print(f"Found device: {dev}")
+            logging.info(f"Found device: {dev}")
             cams.append(ZedCamera(dev.serial_number))
         return cams
 
@@ -40,7 +41,7 @@ class ZedCamera(Camera):
         self.device = sl.Camera()
         err = self.device.open(self.init_params)
         if err != sl.ERROR_CODE.SUCCESS:
-            print("Error opening ZED camera: ", err)
+            logging.error("Error opening ZED camera: ", err)
             exit()
 
         info = self.device.get_camera_information()

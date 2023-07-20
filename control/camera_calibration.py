@@ -11,6 +11,7 @@ import cv2
 from tqdm import tqdm
 from cv2 import aruco
 from scipy import optimize
+import logging
 
 
 class CameraCalibrator:
@@ -48,7 +49,7 @@ class CameraCalibrator:
                     c.attach(self._scene.robots[parent], extrinsic_matrix)
                 c.set_calibration(intrinsic_matrix, dist_coeffs, extrinsic_matrix)
             except KeyError:
-                print("No calibration data for camera", c.unique_id)
+                logging.info("No calibration data for camera", c.unique_id)
 
     def dump(self) -> Dict:
         """dump calibration as config dict"""
@@ -80,7 +81,7 @@ class CameraCalibrator:
 
     def calibrate(self):
         if self.aruco_dict is None:
-            print("Please setup charuco board first")
+            logging.error("Please setup charuco board first")
             return
 
         allCorners = []
@@ -157,7 +158,7 @@ class CameraCalibrator:
             + cv2.CALIB_FIX_ASPECT_RATIO
         )
         # flags = (cv2.CALIB_RATIONAL_MODEL)
-        print("Calibrating intrinsics...")
+        logging.info("Calibrating intrinsics...")
         (
             ret,
             camera_matrix,
@@ -182,17 +183,17 @@ class CameraCalibrator:
         for cal_result, rvec, tvec in zip(self.calibration_results, rvecs, tvecs):
             cal_result["estimated_pose6d"] = np.concatenate([tvec, rvec], axis=0)[:, 0]
 
-        print("Done")
+        logging.info("Done")
 
-        print("Calibrating extrinsics...")
+        logging.info("Calibrating extrinsics...")
         camera_poses = [
             np.concatenate([tvec, rvec], axis=0)[:, 0]
             for tvec, rvec in zip(tvecs, rvecs)
         ]
         ret = self._optimize_handeye_matrix(camera_poses, allRobotPoses)
-        print("Done")
-        print("Optimality: ", ret["optimality"])
-        print("Cost:       ", ret["cost"])
+        logging.info("Done")
+        logging.info("Optimality: ", ret["optimality"])
+        logging.info("Cost:       ", ret["cost"])
 
         x = ret["x"]
         extrinsic_matrix = invert_homogeneous(
@@ -276,7 +277,7 @@ class CameraCalibrator:
 
         pixel_w = width_m / width
         pixel_h = height_m / height
-        # print(f"Pixel dimensions: {pixel_w} x {pixel_h} m")
+        logging.debug(f"Pixel dimensions: {pixel_w} x {pixel_h} m")
 
         chessboard_size = self.CHESSBOARD_SIZE // pixel_w * pixel_w  # in m
         marker_size = self.MARKER_SIZE // pixel_w * pixel_w
@@ -292,7 +293,6 @@ class CameraCalibrator:
         # charuco board is created with pixel_w as square size
         # the actual pixel dimensions can vary so image needs to stretched/compressed in y
         y_factor = pixel_h / pixel_w
-        print("Apply y factor: ", y_factor)
         charuco_img_height *= y_factor
 
         self.aruco_dict = aruco.getPredefinedDictionary(self.CHARUCO_DICT)
@@ -300,7 +300,7 @@ class CameraCalibrator:
             n_markers[0], n_markers[1], chessboard_size, marker_size, self.aruco_dict
         )
 
-        print(
+        logging.debug(
             "Creating Charuco image with size: ", charuco_img_width, charuco_img_height
         )
         charuco_img = self.charuco_board.draw(
@@ -327,10 +327,10 @@ class CameraCalibrator:
         self.markers2monitor[0, 3] = charuco_img_width_m / 2.0
         self.markers2monitor[1, 3] = charuco_img_height_m / 2.0
 
-        print(
+        logging.warn(
             f"Confirm the dimensions of the chessboard in the image: {chessboard_size}"
         )
-        print(f"Confirm the dimensions of the markers in the image: {marker_size}")
+        logging.warn(f"Confirm the dimensions of the markers in the image: {marker_size}")
 
     def _optimize_handeye_matrix(self, camera_poses, robot_poses):
         camera2tool_t = np.zeros((6,))

@@ -2,64 +2,47 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 import cv2
 
+from model.scene import Scene
+from lib.geometry import invert_homogeneous
+
+import time
+
 
 class PoseRegistrator:
     # handles the initial object pose registration
-    def __init__(self):
+    def __init__(self, scene: Scene):
         super().__init__()
         # TODO set initial pose to the center of the charuco board
         # TODO set background monitor so some 'easy' background
         # TODO set lighting to standard lighting
-        self.captured_images = []
-        self.registered_position = None
-        self.registered_orientation = None
-        self.reset()
-
-    def capture_image(self):
-        # TODO actually capture image from camera
-        # TODO also capture robot pose
-        mock_img = np.random.uniform(size=(480, 640, 3), high=255).astype(np.uint8)
-        cv2.putText(
-            mock_img,
-            f"Captured Image {len(self.captured_images)}",
-            (100, 100),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            1,
-            (0, 0, 0),
-            2,
-            cv2.LINE_AA,
-        )
-        self.captured_images.append(mock_img)
-
-    def get_position(self):
-        return self.registered_position
-
-    def set_position(self, position):
-        self.registered_position = position
-
-    def get_orientation(self):
-        return self.registered_orientation
-
-    def set_orientation(self, orientation):
-        self.registered_orientation = orientation
-
-    def reset(self):
-        self.registered_position = [0.0, 0.0, 0.0]
-        self.registered_orientation = R.from_quat([0, 0, 0, 1])
+        self._scene = scene
 
     def optimize_pose(self):
         # TODO optimize pose in each image using ICP
         # TODO optimize object pose over all images
         # TODO inform user about optimization result
         # TODO save optimized pose to the scene
-        pass
+        monitor_pose = self._scene.background.pose
+        for obj in self._scene.objects.values():
+            obj.register_pose(monitor_pose)
 
-    def get_live_img(self):
-        # TODO draw object at globally optimized pose on image
-        return np.random.uniform(size=(480, 640, 3), high=255).astype(np.uint8)
+    def draw_registered_objects(self, rgb, cam_pose, cam_intrinsics, cam_dist_coeffs):
+        if cam_intrinsics is None:
+            return rgb
 
-    def get_selected_img(self, index):
-        # TODO draw object pose on image (for each ICP optimized pose)
-        if index is None:
-            return None
-        return self.captured_images[index]
+        # get points of object mesh
+        for obj in self._scene.objects.values():
+            if not obj.registered:
+                continue
+            points = np.asarray(obj.mesh.vertices)
+            cam2obj = invert_homogeneous(cam_pose) @ obj.pose
+            rvec, _ = cv2.Rodrigues(cam2obj[:3, :3])
+            tvec = cam2obj[:3, 3]
+
+            projected_points, _ = cv2.projectPoints(
+                points, rvec, tvec, cam_intrinsics, cam_dist_coeffs
+            )
+            projected_points = projected_points.astype(np.int32)
+            rgb[projected_points[:, 0, 1], projected_points[:, 0, 0]] = obj.semantic_color
+
+        return rgb

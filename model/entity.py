@@ -48,3 +48,6 @@ class Entity:
         with self.lock:
             self.parent = None
             self._link_matrix = None
+
+    def __str__(self) -> str:
+        return f"{self.name}"

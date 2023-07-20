@@ -1,15 +1,15 @@
 from typing import List, Dict
 
-from model.observer import Subject, Event
+from model.observer import Observable, Event
 from model.labelled_object import LabelledObject
 from model.robot import Robot
 from model.camera.camera import Camera
 from model.background_monitor import BackgroundMonitor
 
 
-class Scene(Subject):
+class Scene(Observable):
     def __init__(self) -> None:
-        Subject.__init__(self)
+        Observable.__init__(self)
         self.objects: Dict[str, LabelledObject] = {}
         self.robots: Dict[str, Robot] = {}
         self.cameras: Dict[str, Camera] = {}
@@ -32,3 +32,6 @@ class Scene(Subject):
 
     def select_camera_by_id(self, unique_id):
         self.selected_camera = self.cameras[unique_id]
+
+    def __str__(self) -> str:
+        return f"Scene"

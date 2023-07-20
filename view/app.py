@@ -21,6 +21,10 @@ from .view_calibration import ViewCalibration
 from .view_pose_registration import ViewPoseRegistration
 from .view_acquisition import ViewAcquisition
 
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
+
 
 class App:
     OVERVIEW = "overview"
@@ -34,7 +38,7 @@ class App:
         self.scene = Scene()
         # --- load controllers ---
         self.calibrator = CameraCalibrator(self.scene)
-        self.pose_registrator = PoseRegistrator()
+        self.pose_registrator = PoseRegistrator(self.scene)
 
         ## ---  build GUI ---
         self.menubar = tk.Menu(self.root)
@@ -54,11 +58,12 @@ class App:
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
         self.root.rowconfigure(1, weight=1)
-        self.overview = Overview(self.root, self.scene, self.calibrator)
+        self.overview = Overview(
+            self.root, self.scene, self.calibrator, self.pose_registrator
+        )
         tabs = ttk.Notebook(self.root)
         self.overview.grid(sticky=tk.NSEW, pady=10)
         tabs.grid(sticky=tk.NSEW, pady=10)
-
 
         self.cal = ViewCalibration(tabs, self.scene, self.calibrator)
         tabs.add(self.cal, text="1. Camera Calibration")
@@ -86,7 +91,6 @@ class App:
             self.scene.add_camera(cam)
 
     def run(self):
-        print("Running...")
         tk.mainloop()
 
     def _on_load_config(self):

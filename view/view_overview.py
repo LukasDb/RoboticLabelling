@@ -10,16 +10,24 @@ from model.camera.camera import Camera
 from model.observer import Observer, Event
 from view.resizable_image import ResizableImage
 from control.camera_calibration import CameraCalibrator
+from control.pose_registrator import PoseRegistrator
 
 
 class Overview(Observer, tk.Frame):
-    def __init__(self, parent, scene: Scene, calibrator: CameraCalibrator) -> None:
+    def __init__(
+        self,
+        parent,
+        scene: Scene,
+        calibrator: CameraCalibrator,
+        registrator: PoseRegistrator,
+    ) -> None:
         # TODO semantics editor: create an object, by selecting a mesh and a label
         # TODO show available cameras
         tk.Frame.__init__(self, parent)
         Observer.__init__(self)
         self._scene = scene
         self._calibrator = calibrator
+        self._registrator = registrator
         self.listen_to(self._scene)
 
         self._cam_rows: Dict[str, Dict] = {}
@@ -235,6 +243,12 @@ class Overview(Observer, tk.Frame):
             img = frame.rgb
 
             img = self._calibrator.draw_calibration(img)
+            img = self._registrator.draw_registered_objects(
+                img,
+                selected_cam.pose,
+                selected_cam.intrinsic_matrix,
+                selected_cam.dist_coeffs,
+            )
 
             if img is not None:
                 self.live_canvas.set_image(img)
