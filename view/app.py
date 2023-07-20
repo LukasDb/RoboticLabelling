@@ -40,8 +40,8 @@ class App:
         self.menubar = tk.Menu(self.root)
         self.filemenu = tk.Menu(self.menubar, tearoff=0)
         # add save menu
-        self.filemenu.add_command(label="Save...", command=self._on_save_calib)
-        self.filemenu.add_command(label="Load...", command=self._on_load_calib)
+        self.filemenu.add_command(label="Save...", command=self._on_save_config)
+        self.filemenu.add_command(label="Load...", command=self._on_load_config)
         self.filemenu.add_separator()
         self.filemenu.add_command(label="Exit", command=self.root.quit)
         self.menubar.add_cascade(label="File", menu=self.filemenu)
@@ -89,7 +89,7 @@ class App:
         print("Running...")
         tk.mainloop()
 
-    def _on_load_calib(self):
+    def _on_load_config(self):
         file = filedialog.askopenfile(
             title="Select Configuration file",
             filetypes=(("configuration files", "*.config"), ("all files", "*.*")),
@@ -99,7 +99,11 @@ class App:
 
         self.calibrator.load(data["camera_calibration"])
 
-    def _on_save_calib(self):
+        for name, mesh_path in data["objects"].items():
+            obj = LabelledObject(name, mesh_path)
+            self.scene.add_object(obj)
+
+    def _on_save_config(self):
         default_name = "scene"
 
         file = filedialog.asksaveasfile(
@@ -108,7 +112,12 @@ class App:
             defaultextension=".config",
             initialfile=default_name,
         )
-        data = {"camera_calibration": self.calibrator.dump()}
+        data = {
+            "camera_calibration": self.calibrator.dump(),
+            "objects": {
+                name: obj.mesh_path for name, obj in self.scene.objects.items()
+            },
+        }
 
         with Path(file.name).open("wb") as f:
             pickle.dump(data, f)
