@@ -51,14 +51,14 @@ class App:
         self.menubar.add_cascade(label="Object", menu=self.objectmenu)
 
         self.root.config(menu=self.menubar)
-
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
+        self.root.rowconfigure(1, weight=1)
+        self.overview = Overview(self.root, self.scene, self.calibrator)
         tabs = ttk.Notebook(self.root)
-        tabs.grid(padx=10, pady=10, sticky=tk.NSEW)
+        self.overview.grid(sticky=tk.NSEW, pady=10)
+        tabs.grid(sticky=tk.NSEW, pady=10)
 
-        self.overview = Overview(tabs, self.scene)
-        tabs.add(self.overview, text="Overview")
 
         self.cal = ViewCalibration(tabs, self.scene, self.calibrator)
         tabs.add(self.cal, text="1. Camera Calibration")

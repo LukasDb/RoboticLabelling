@@ -28,7 +28,6 @@ class CameraCalibrator:
 
         self.calibration_results: List[Dict] = []
 
-        self.selected_camera: Camera = None
         self.aruco_dict = None
         self.charuco_board = None
         self.markers2monitor = np.eye(4)
@@ -71,13 +70,9 @@ class CameraCalibrator:
         self._scene.background.setup_window()
         self.setup_charuco_board()
 
-    def select_camera(self, camera_name):
-        cams = self._scene.cameras.values()
-        self.selected_camera = [x for x in cams if x.name == camera_name][0]
-
     def capture_image(self):
-        img = self.selected_camera.get_frame().rgb
-        pose = self.selected_camera.parent.pose
+        img = self._scene.selected_camera.get_frame().rgb
+        pose = self._scene.selected_camera.parent.pose
         if img is not None and pose is not None:
             self.captured_images.append(img)
             self.captured_robot_poses.append(pose)
@@ -210,18 +205,16 @@ class CameraCalibrator:
         self._scene.background.pose = world2markers @ self.markers2monitor
 
         # set camera atttributes
-        self.selected_camera.set_calibration(
+        self._scene.selected_camera.set_calibration(
             camera_matrix, dist_coeffs, extrinsic_matrix
         )
 
-    def get_live_img(self) -> np.ndarray | None:
+    def draw_calibration(self, rgb) -> np.ndarray:
         monitor = self._scene.background
-        cam = self.selected_camera
+        cam = self._scene.selected_camera
         if cam is None:
-            return None
-        frame = cam.get_frame()
-        rgb = frame.rgb
-
+            return rgb
+        
         if cam.intrinsic_matrix is not None:
             cam2monitor = invert_homogeneous(cam.pose) @ monitor.pose
             monitor.draw_on_rgb(
@@ -238,7 +231,7 @@ class CameraCalibrator:
             return None
 
         monitor = self._scene.background
-        cam = self.selected_camera
+        cam = self._scene.selected_camera
 
         img = self.captured_images[index].copy()
 

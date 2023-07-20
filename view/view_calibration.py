@@ -3,13 +3,13 @@ from tkinter import ttk
 from PIL import ImageTk, Image
 import numpy as np
 import cv2
-import threading
 import time
 
 from model.scene import Scene
 from model.observer import Observer, Event
-from view.resizable_image import ResizableImage
 from control.camera_calibration import CameraCalibrator
+from view.resizable_image import ResizableImage
+
 
 
 class ViewCalibration(Observer, ttk.Frame):
@@ -32,17 +32,10 @@ class ViewCalibration(Observer, ttk.Frame):
         self.setup_controls()
         self.setup_previews()
 
-        self.stop_event = threading.Event()
-        self.live_thread = threading.Thread(target=self.live_thread_fn, daemon=True)
-        self.live_thread.start()
 
     def update_observer(self, subject, event: Event, *args, **kwargs):
         if event == Event.CAMERA_ADDED:
             self.setup_controls()
-
-    def destroy(self) -> None:
-        self.stop_event.set()
-        return super().destroy()
 
     def setup_controls(self):
         self.control_frame = ttk.Frame(self)
@@ -52,14 +45,6 @@ class ViewCalibration(Observer, ttk.Frame):
             self.control_frame,
             text="Setup",
             command=self.calibrator.setup,
-        )
-
-        self.camera_selection = ttk.Combobox(
-            self.control_frame, values=[c.name for c in self.scene.cameras.values()]
-        )
-        self.camera_selection.set("")
-        self.camera_selection.bind(
-            "<<ComboboxSelected>>", self.on_camera_selection_change
         )
 
         self.capture_button = ttk.Button(
@@ -85,7 +70,6 @@ class ViewCalibration(Observer, ttk.Frame):
 
         pady = 5
         self.btn_setup.grid(pady=pady)
-        self.camera_selection.grid(pady=pady)
         self.capture_button.grid(pady=pady)
         self.clear_button.grid(pady=pady)
         self.image_selection.grid(pady=pady)
@@ -98,19 +82,10 @@ class ViewCalibration(Observer, ttk.Frame):
         self.preview_frame.rowconfigure(1, weight=1)
         self.preview_frame.columnconfigure(0, weight=1)
 
-        live_img = self.calibrator.get_live_img()
-        self.live_canvas = ResizableImage(
-            self.preview_frame, image=live_img, bg="#000000"
-        )
-
         self.selected_image_canvas = ResizableImage(self.preview_frame, bg="#000000")
 
-        self.live_canvas.grid(row=0, sticky=tk.NSEW)
         self.selected_image_canvas.grid(row=1, sticky=tk.NSEW)
 
-    def on_camera_selection_change(self, _):
-        selected = self.camera_selection.get()
-        self.calibrator.select_camera(selected)
 
     def update_selected_image_preview(self):
         selected = self.image_selection.get()
@@ -142,18 +117,3 @@ class ViewCalibration(Observer, ttk.Frame):
         self.image_selection.set("")
         self.selected_image_canvas.clear_image()
 
-    def live_thread_fn(self):
-        t_previous = time.perf_counter()
-        FPS = 20
-        while not self.stop_event.is_set():
-            t = time.perf_counter()
-            if (t - t_previous) < 1 / FPS:  # 30 FPS
-                time.sleep(1 / FPS - (t - t_previous))
-            t_previous = time.perf_counter()
-
-            img = self.calibrator.get_live_img()
-
-            if img is not None:
-                self.live_canvas.set_image(img)
-            else:
-                self.live_canvas.clear_image()
