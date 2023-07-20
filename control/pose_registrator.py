@@ -43,6 +43,14 @@ class PoseRegistrator:
                 points, rvec, tvec, cam_intrinsics, cam_dist_coeffs
             )
             projected_points = projected_points.astype(np.int32)
-            rgb[projected_points[:, 0, 1], projected_points[:, 0, 0]] = obj.semantic_color
+
+            # clip to image size
+            projected_points = np.clip(
+                projected_points, 0, np.array(rgb.shape[1::-1]) - 1
+            )
+
+            rgb[
+                projected_points[:, 0, 1], projected_points[:, 0, 0]
+            ] = obj.semantic_color
 
         return rgb

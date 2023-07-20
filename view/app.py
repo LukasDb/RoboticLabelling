@@ -105,8 +105,12 @@ class App:
 
         self.calibrator.load(data["camera_calibration"])
 
-        for name, mesh_path in data["objects"].items():
-            obj = LabelledObject(name, mesh_path)
+        for obj_data in data["objects"]:
+            obj = LabelledObject(
+                obj_data["name"], obj_data["mesh_path"], obj_data["semantic_color"]
+            )
+            if obj_data["registered"]:
+                obj.register_pose(obj_data["pose"])
             self.scene.add_object(obj)
 
     def _on_save_config(self):
@@ -120,9 +124,16 @@ class App:
         )
         data = {
             "camera_calibration": self.calibrator.dump(),
-            "objects": {
-                name: obj.mesh_path for name, obj in self.scene.objects.items()
-            },
+            "objects": [
+                {
+                    "name": name,
+                    "mesh_path": obj.mesh_path,
+                    "pose": obj.pose,
+                    "registered": obj.registered,
+                    "semantic_color": obj.semantic_color,
+                }
+                for name, obj in self.scene.objects.items()
+            ],
         }
 
         with Path(file.name).open("wb") as f:
@@ -140,4 +151,6 @@ class App:
         path = Path(file.name)
 
         new_object = LabelledObject(path.stem, path)
+        monitor_pose = self.scene.background.pose
+        new_object.pose = monitor_pose  # add this as inital position
         self.scene.add_object(new_object)
