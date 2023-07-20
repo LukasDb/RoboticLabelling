@@ -15,6 +15,8 @@ class Scene(Subject):
         self.cameras: Dict[str, Camera] = {}
         self.background = BackgroundMonitor()
         # TODO self.ligthing = LightController()
+        self.selected_camera: Camera = None
+        self.selected_object: LabelledObject = None
 
     def add_camera(self, camera: Camera):
         self.cameras.update({camera.unique_id: camera})
@@ -27,3 +29,6 @@ class Scene(Subject):
     def add_object(self, obj: LabelledObject):
         self.objects.update({obj.name: obj})
         self.notify(Event.OBJECT_ADDED, object=obj)
+
+    def select_camera_by_id(self, unique_id):
+        self.selected_camera = self.cameras[unique_id]
