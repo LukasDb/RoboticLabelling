@@ -1,11 +1,22 @@
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 import cv2
+from typing import List
+from dataclasses import dataclass
 
 from model.scene import Scene
 from lib.geometry import invert_homogeneous
 
 import time
+
+
+@dataclass
+class Datapoint:
+    rgb: np.ndarray
+    depth: np.ndarray
+    pose: np.ndarray
+    intrinsics: np.ndarray
+    dist_coeffs: np.ndarray
 
 
 class PoseRegistrator:
@@ -17,6 +28,23 @@ class PoseRegistrator:
         # TODO set lighting to standard lighting
         self._scene = scene
 
+        self.datapoints: List[Datapoint] = []
+
+    def capture_image(self) -> Datapoint | None:
+        frame = self._scene.selected_camera.get_frame()
+        if frame.rgb is None or self._scene.selected_camera.intrinsic_matrix is None:
+            return None
+
+        datapoint = Datapoint(
+            rgb=frame.rgb,
+            depth=frame.depth,
+            pose=self._scene.selected_camera.pose,
+            intrinsics=self._scene.selected_camera.intrinsic_matrix,
+            dist_coeffs=self._scene.selected_camera.dist_coeffs,
+        )
+        self.datapoints.append(datapoint)
+        return datapoint
+
     def optimize_pose(self):
         # TODO optimize pose in each image using ICP
         # TODO optimize object pose over all images
@@ -27,30 +55,33 @@ class PoseRegistrator:
             obj.register_pose(monitor_pose)
 
     def draw_registered_objects(self, rgb, cam_pose, cam_intrinsics, cam_dist_coeffs):
-        if cam_intrinsics is None:
-            return rgb
-
-        # get points of object mesh
         for obj in self._scene.objects.values():
             if not obj.registered:
                 continue
-            points = np.asarray(obj.mesh.vertices)
-            cam2obj = invert_homogeneous(cam_pose) @ obj.pose
-            rvec, _ = cv2.Rodrigues(cam2obj[:3, :3])
-            tvec = cam2obj[:3, 3]
-
-            projected_points, _ = cv2.projectPoints(
-                points, rvec, tvec, cam_intrinsics, cam_dist_coeffs
+            self.draw_registered_object(
+                obj, rgb, cam_pose, cam_intrinsics, cam_dist_coeffs
             )
-            projected_points = projected_points.astype(np.int32)
+        return rgb
 
-            # clip to image size
-            projected_points = np.clip(
-                projected_points, 0, np.array(rgb.shape[1::-1]) - 1
-            )
+    def draw_registered_object(
+        self, obj, rgb, cam_pose, cam_intrinsics, cam_dist_coeffs
+    ):
+        if cam_intrinsics is None:
+            return rgb
 
-            rgb[
-                projected_points[:, 0, 1], projected_points[:, 0, 0]
-            ] = obj.semantic_color
+        points = np.asarray(obj.mesh.vertices)
+        cam2obj = invert_homogeneous(cam_pose) @ obj.pose
+        rvec, _ = cv2.Rodrigues(cam2obj[:3, :3])
+        tvec = cam2obj[:3, 3]
+
+        projected_points, _ = cv2.projectPoints(
+            points, rvec, tvec, cam_intrinsics, cam_dist_coeffs
+        )
+        projected_points = projected_points.astype(np.int32)
+
+        # clip to image size
+        projected_points = np.clip(projected_points, 0, np.array(rgb.shape[1::-1]) - 1)
+
+        rgb[projected_points[:, 0, 1], projected_points[:, 0, 0]] = obj.semantic_color
 
         return rgb

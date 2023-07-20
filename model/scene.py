@@ -33,5 +33,8 @@ class Scene(Observable):
     def select_camera_by_id(self, unique_id):
         self.selected_camera = self.cameras[unique_id]
 
+    def select_object_by_name(self, name):
+        self.selected_object = self.objects[name]
+
     def __str__(self) -> str:
         return f"Scene"

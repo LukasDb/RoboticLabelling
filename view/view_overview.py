@@ -262,6 +262,7 @@ class Overview(Observer, tk.Frame):
             frame = selected_cam.get_frame()
             img = frame.rgb
 
+
             img = self._calibrator.draw_calibration(img)
             img = self._registrator.draw_registered_objects(
                 img,
