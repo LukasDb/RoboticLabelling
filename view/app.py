@@ -22,7 +22,9 @@ from .view_pose_registration import ViewPoseRegistration
 from .view_acquisition import ViewAcquisition
 
 import logging
+import coloredlogs
 
+coloredlogs.install()
 logging.basicConfig(level=logging.DEBUG)
 
 
