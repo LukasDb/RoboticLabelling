@@ -3,8 +3,11 @@ from typing import List
 
 
 class Event(Enum):
+    CAMERA_ADDED = auto()
     CAMERA_CALIBRATED = auto()
     CAMERA_ATTACHED = auto()
+    OBJECT_ADDED = auto()
+    ROBOT_ADDED = auto()
 
 
 class Subject:
@@ -16,7 +19,7 @@ class Subject:
 
     def notify(self, event: Event, *args, **kwargs):
         for observer in self.__observers:
-            observer.update(self, event, *args, **kwargs)
+            observer.update_observer(self, event, *args, **kwargs)
 
 
 class Observer:
@@ -27,5 +30,5 @@ class Observer:
     def listen_to(self, subject: Subject):
         subject.register(self)
 
-    def update(self, subject: Subject, event: Event, *args, **kwargs):
+    def update_observer(self, subject: Subject, event: Event, *args, **kwargs):
         pass

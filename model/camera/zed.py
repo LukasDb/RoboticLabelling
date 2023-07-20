@@ -19,7 +19,6 @@ class ZedCamera(Camera):
             "If you get segmentation fault here, reverse the USB type C cable on the ZED camera."
         )
         dev_list = sl.Camera.get_device_list()
-        print("Success")
         for dev in dev_list:  # list[DeviceProperties]
             print(f"Found device: {dev}")
             cams.append(ZedCamera(dev.serial_number))

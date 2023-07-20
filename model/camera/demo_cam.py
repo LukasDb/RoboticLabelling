@@ -27,7 +27,12 @@ class DemoCam(Camera):
             pose_path = Path(f"demo_data/poses/{self.mock_cam}/{index:04}.txt")
             robot_pose = np.loadtxt(str(pose_path))
 
-        self.pose = robot_pose @ self.extrinsic_matrix
+        # update mock robot pose
+        try:
+            self.parent.pose = robot_pose
+        except AttributeError:
+            pass
+
         time.sleep(0.5)
         return CamFrame(rgb=img)
 

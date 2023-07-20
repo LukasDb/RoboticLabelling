@@ -1,22 +1,26 @@
 import tkinter as tk
 from tkinter import ttk
 from PIL import ImageTk, Image
-from model.scene import Scene
-from control.camera_calibration import CameraCalibrator
 import numpy as np
 import cv2
-from view.resizable_image import ResizableImage
 import threading
 import time
 
+from model.scene import Scene
+from model.observer import Observer, Event
+from view.resizable_image import ResizableImage
+from control.camera_calibration import CameraCalibrator
 
-class ViewCalibration(ttk.Frame):
+
+class ViewCalibration(Observer, ttk.Frame):
     PREVIEW_WIDTH = 640
     PREVIEW_HEIGHT = 480
 
-    def __init__(self, parent, scene: Scene) -> None:
+    def __init__(self, parent, scene: Scene, calibrator: CameraCalibrator) -> None:
         ttk.Frame.__init__(self, parent)
         self.scene = scene
+        self.listen_to(self.scene)
+        self.calibrator = calibrator
 
         self.title = ttk.Label(self, text="1. Camera Calibration")
         self.title.grid(row=0, column=0, columnspan=2)
@@ -25,14 +29,16 @@ class ViewCalibration(ttk.Frame):
         self.columnconfigure(1, weight=0, minsize=200)
         self.rowconfigure(1, weight=1)
 
-        self.calibrator = CameraCalibrator(self.scene)
-
         self.setup_controls()
         self.setup_previews()
 
         self.stop_event = threading.Event()
         self.live_thread = threading.Thread(target=self.live_thread_fn, daemon=True)
         self.live_thread.start()
+
+    def update_observer(self, subject, event: Event, *args, **kwargs):
+        if event == Event.CAMERA_ADDED:
+            self.setup_controls()
 
     def destroy(self) -> None:
         self.stop_event.set()
@@ -51,7 +57,7 @@ class ViewCalibration(ttk.Frame):
         self.camera_selection = ttk.Combobox(
             self.control_frame, values=[c.name for c in self.scene.cameras.values()]
         )
-        self.camera_selection.set(self.calibrator.selected_camera.name)
+        self.camera_selection.set("")
         self.camera_selection.bind(
             "<<ComboboxSelected>>", self.on_camera_selection_change
         )
@@ -77,12 +83,13 @@ class ViewCalibration(ttk.Frame):
             command=self.on_calibrate,
         )
 
-        self.btn_setup.grid(row=0)
-        self.camera_selection.grid(row=1)
-        self.capture_button.grid(row=2)
-        self.clear_button.grid(row=3)
-        self.image_selection.grid(row=4)
-        self.calibrate_button.grid(row=5)
+        pady = 5
+        self.btn_setup.grid(pady=pady)
+        self.camera_selection.grid(pady=pady)
+        self.capture_button.grid(pady=pady)
+        self.clear_button.grid(pady=pady)
+        self.image_selection.grid(pady=pady)
+        self.calibrate_button.grid(pady=pady)
 
     def setup_previews(self):
         self.preview_frame = ttk.Frame(self)
