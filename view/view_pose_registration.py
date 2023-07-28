@@ -63,7 +63,7 @@ class ViewPoseRegistration(Observer, ttk.Frame):
         def sb():
             return ttk.Spinbox(
             control_frame,
-            from_=-1.0,
+            from_=0.0,
             to=1.0,
             increment=0.2,
             command= lambda: self._change_initial_guess()
@@ -114,8 +114,8 @@ class ViewPoseRegistration(Observer, ttk.Frame):
         self.registrator.move_pose(
             self.scene.selected_object,
             self.manual_pose_x.get(),     # user inputs
-            #self.manual_pose_y.get(),
-            #self.manual_pose_z.get(),
+            self.manual_pose_y.get(),
+            self.manual_pose_z.get(),
             )
         self._preview_buffer()      # paint new mesh
 
