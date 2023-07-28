@@ -9,7 +9,7 @@ from model.scene import Scene
 from model.fanuc_crx10ial import FanucCRX10iAL
 from model.demo_robot import MockRobot
 from model.camera.realsense import Realsense
-from model.camera.zed import ZedCamera
+#from model.camera.zed import ZedCamera
 from model.camera.demo_cam import DemoCam
 from model.labelled_object import LabelledObject
 
@@ -89,8 +89,8 @@ class App:
         for cam in Realsense.get_available_devices():
             self.scene.add_camera(cam)
 
-        for cam in ZedCamera.get_available_devices():
-            self.scene.add_camera(cam)
+        #for cam in ZedCamera.get_available_devices():
+        #    self.scene.add_camera(cam)
 
     def run(self):
         tk.mainloop()

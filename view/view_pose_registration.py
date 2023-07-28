@@ -53,9 +53,33 @@ class ViewPoseRegistration(Observer, ttk.Frame):
             text="Optimize",
             command=self.registrator.optimize_pose,
         )
-        pady = 5
+
+        # add button to move object pose
+        self.position_label = ttk.Label(
+            control_frame, 
+            text="Position:"
+        )
+        
+        def sb():
+            return ttk.Spinbox(
+            control_frame,
+            from_=-1.0,
+            to=1.0,
+            increment=0.01,
+            #command=self._change_initial_guess(),
+            )   
+        self.manual_pose_x = sb()
+        self.manual_pose_y = sb()
+        self.manual_pose_z = sb()
+            
+
+        pady = 10
         self.capture_button.grid(pady=pady)
         self.object_selection.grid(pady=pady)
+        self.position_label.grid(pady=pady)
+        self.manual_pose_x.grid(pady=pady)
+        self.manual_pose_y.grid(pady=pady)
+        self.manual_pose_z.grid(pady=pady)
         self.update_button.grid(pady=pady)
 
         return control_frame
@@ -85,6 +109,15 @@ class ViewPoseRegistration(Observer, ttk.Frame):
     def _on_object_selected(self):
         self.scene.select_object_by_name(self.object_selection.get())
         self._preview_buffer()
+
+    def _change_initial_guess(self):
+        self.registrator.move_pose(
+            self.scene.selected_object,
+            self.manual_pose_x.get()     # user input
+            #self.manual_pose_y.get(),
+            #self.manual_pose_z.get(),
+            )
+        self._preview_buffer()      # paint new mesh
 
     def _on_capture(self):
         self.registrator.capture_image()

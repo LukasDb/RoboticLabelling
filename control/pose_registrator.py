@@ -54,6 +54,16 @@ class PoseRegistrator:
         for obj in self._scene.objects.values():
             obj.register_pose(monitor_pose)
 
+    def move_pose(self,obj,x,y,z):
+        #rvec, _ = cv2.Rodrigues(pose[:3, :3])
+        #tvec = pose[:3, 3]
+        #tvec[0]+=x
+        obj.pose[0,3] = x
+        obj.pose[1,3] = y
+        obj.pose[2,3] = z
+        
+
+
     def draw_registered_objects(self, rgb, cam_pose, cam_intrinsics, cam_dist_coeffs):
         for obj in self._scene.objects.values():
             if not obj.registered:
