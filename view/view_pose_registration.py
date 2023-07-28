@@ -65,22 +65,22 @@ class ViewPoseRegistration(Observer, ttk.Frame):
             control_frame,
             from_=-1.0,
             to=1.0,
-            increment=0.01,
-            #command=self._change_initial_guess(),
+            increment=0.2,
+            command= lambda: self._change_initial_guess()
             )   
         self.manual_pose_x = sb()
         self.manual_pose_y = sb()
-        self.manual_pose_z = sb()
-            
+        self.manual_pose_z = sb() 
 
-        pady = 10
+        pady = 5
+        pady_L = 20
         self.capture_button.grid(pady=pady)
         self.object_selection.grid(pady=pady)
-        self.position_label.grid(pady=pady)
+        self.position_label.grid(pady=pady_L)
         self.manual_pose_x.grid(pady=pady)
         self.manual_pose_y.grid(pady=pady)
         self.manual_pose_z.grid(pady=pady)
-        self.update_button.grid(pady=pady)
+        self.update_button.grid(pady=pady_L)
 
         return control_frame
 
@@ -113,7 +113,7 @@ class ViewPoseRegistration(Observer, ttk.Frame):
     def _change_initial_guess(self):
         self.registrator.move_pose(
             self.scene.selected_object,
-            self.manual_pose_x.get()     # user input
+            self.manual_pose_x.get(),     # user inputs
             #self.manual_pose_y.get(),
             #self.manual_pose_z.get(),
             )
