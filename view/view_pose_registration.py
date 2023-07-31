@@ -3,6 +3,7 @@ from tkinter import ttk
 from scipy.spatial.transform import Rotation as R
 import itertools as it
 from typing import List
+from lib.geometry import get_rvec_tvec_from_affine_matrix
 
 from model.scene import Scene
 from model.observer import Event, Observable, Observer
@@ -60,17 +61,22 @@ class ViewPoseRegistration(Observer, ttk.Frame):
             text="Position:"
         )
         
-        def sb():
+        def sb(var):
             return ttk.Spinbox(
             control_frame,
-            from_=0.0,
+            from_=-1.0,
             to=1.0,
             increment=0.2,
-            command= lambda: self._change_initial_guess()
-            )   
-        self.manual_pose_x = sb()
-        self.manual_pose_y = sb()
-        self.manual_pose_z = sb() 
+            command= lambda : self._change_initial_guess(),
+            textvariable=var
+            )
+        xtk=tk.DoubleVar(value=0.0)
+        ytk=tk.DoubleVar(value=0.0)
+        ztk=tk.DoubleVar(value=0.0)
+        self.manual_pose_x = sb(xtk)
+        self.manual_pose_y = sb(ytk)
+        self.manual_pose_z = sb(ztk)
+
 
         pady = 5
         pady_L = 20
@@ -110,14 +116,28 @@ class ViewPoseRegistration(Observer, ttk.Frame):
         self.scene.select_object_by_name(self.object_selection.get())
         self._preview_buffer()
 
+        (x,y,z),_ = get_rvec_tvec_from_affine_matrix(
+            self.scene.selected_object.pose)    
+        self.manual_pose_x.set(x)              #set spinbox values to current pose
+        self.manual_pose_y.set(y)
+        self.manual_pose_z.set(z)
+
+    
     def _change_initial_guess(self):
-        self.registrator.move_pose(
-            self.scene.selected_object,
-            self.manual_pose_x.get(),     # user inputs
-            self.manual_pose_y.get(),
-            self.manual_pose_z.get(),
-            )
-        self._preview_buffer()      # paint new mesh
+        if self.scene.selected_object is not None:
+            [x,y,z],[rho,phi,theta]=get_rvec_tvec_from_affine_matrix(
+                self.scene.selected_object.pose)
+            if self.manual_pose_x.get():
+                x = self.manual_pose_x.get()  # user inputs in spinbox
+            if self.manual_pose_y.get():
+                y = self.manual_pose_y.get()
+            if self.manual_pose_z.get():
+                z = self.manual_pose_z.get()
+            self.registrator.move_pose(
+                self.scene.selected_object,
+                x,y,z,
+                )
+            self._preview_buffer()      # paint new mesh
 
     def _on_capture(self):
         self.registrator.capture_image()
