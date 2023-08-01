@@ -64,11 +64,10 @@ class ViewPoseRegistration(Observer, ttk.Frame):
         def sb():
             return ttk.Spinbox(
             control_frame,
-            from_=-4.0,
+            from_=-1.0,
             to=1.0,
-            increment=0.1,
+            increment=0.05,
             command= lambda : self._change_initial_guess(),
-            #textvariable=var
             )
         
         self.manual_pose_x = sb()
@@ -114,7 +113,7 @@ class ViewPoseRegistration(Observer, ttk.Frame):
         self.scene.select_object_by_name(self.object_selection.get())
         self._preview_buffer()
 
-        (x,y,z),_ = get_rvec_tvec_from_affine_matrix(
+        (rho,phi,theta),(x,y,z) = get_rvec_tvec_from_affine_matrix(
             self.scene.selected_object.pose)    
         self.manual_pose_x.set(float(x))              #set first spinbox values to current pose
         self.manual_pose_y.set(float(y))
@@ -122,7 +121,7 @@ class ViewPoseRegistration(Observer, ttk.Frame):
 
     def _change_initial_guess(self):
         if self.scene.selected_object is not None:
-            (x,y,z),(rho,phi,theta)=get_rvec_tvec_from_affine_matrix(
+            (rho,phi,theta),(x,y,z)=get_rvec_tvec_from_affine_matrix(
                 self.scene.selected_object.pose)
             if self.manual_pose_x.get():
                 x = self.manual_pose_x.get()  # user inputs in spinbox
