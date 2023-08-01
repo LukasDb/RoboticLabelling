@@ -60,6 +60,10 @@ class ViewPoseRegistration(Observer, ttk.Frame):
             control_frame, 
             text="Position:"
         )
+        self.orientation_label = ttk.Label(
+            control_frame, 
+            text="Orientation:"
+        )
         
         def sb():
             return ttk.Spinbox(
@@ -70,10 +74,13 @@ class ViewPoseRegistration(Observer, ttk.Frame):
             command= lambda : self._change_initial_guess(),
             )
         
-        self.manual_pose_x = sb()
+        self.manual_pose_x = sb()    # boxes for position user input
         self.manual_pose_y = sb()
         self.manual_pose_z = sb()
 
+        self.manual_pose_rho = sb()    # for angles
+        self.manual_pose_phi = sb()
+        self.manual_pose_theta = sb()
 
         pady = 5
         pady_L = 20
@@ -83,6 +90,10 @@ class ViewPoseRegistration(Observer, ttk.Frame):
         self.manual_pose_x.grid(pady=pady)
         self.manual_pose_y.grid(pady=pady)
         self.manual_pose_z.grid(pady=pady)
+        self.orientation_label.grid(pady=pady_L)
+        self.manual_pose_rho.grid(pady=pady)
+        self.manual_pose_phi.grid(pady=pady)
+        self.manual_pose_theta.grid(pady=pady)
         self.update_button.grid(pady=pady_L)
 
         return control_frame
@@ -118,6 +129,9 @@ class ViewPoseRegistration(Observer, ttk.Frame):
         self.manual_pose_x.set(float(x))              #set first spinbox values to current pose
         self.manual_pose_y.set(float(y))
         self.manual_pose_z.set(float(z))
+        self.manual_pose_rho.set(float(rho))
+        self.manual_pose_phi.set(float(phi))
+        self.manual_pose_theta.set(float(theta))
 
     def _change_initial_guess(self):
         if self.scene.selected_object is not None:
@@ -129,9 +143,17 @@ class ViewPoseRegistration(Observer, ttk.Frame):
                 y = self.manual_pose_y.get()
             if self.manual_pose_z.get():
                 z = self.manual_pose_z.get()
+            if self.manual_pose_x.get():
+                rho = self.manual_pose_rho.get()  # orientation values
+            if self.manual_pose_y.get():
+                phi = self.manual_pose_phi.get()
+            if self.manual_pose_z.get():
+                theta = self.manual_pose_theta.get()    
+
             self.registrator.move_pose(
                 self.scene.selected_object,
-                x,y,z
+                x,y,z,
+                rho,phi,theta
                 )
 
             self._preview_buffer()      # paint new mesh
