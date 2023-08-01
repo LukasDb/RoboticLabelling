@@ -61,21 +61,19 @@ class ViewPoseRegistration(Observer, ttk.Frame):
             text="Position:"
         )
         
-        def sb(var):
+        def sb():
             return ttk.Spinbox(
             control_frame,
             from_=-4.0,
             to=1.0,
             increment=0.1,
             command= lambda : self._change_initial_guess(),
-            textvariable=var
+            #textvariable=var
             )
-        xtk=tk.DoubleVar(value=0.0)
-        ytk=tk.DoubleVar(value=0.0)
-        ztk=tk.DoubleVar(value=0.0)
-        self.manual_pose_x = sb(xtk)
-        self.manual_pose_y = sb(ytk)
-        self.manual_pose_z = sb(ztk)
+        
+        self.manual_pose_x = sb()
+        self.manual_pose_y = sb()
+        self.manual_pose_z = sb()
 
 
         pady = 5
@@ -118,24 +116,25 @@ class ViewPoseRegistration(Observer, ttk.Frame):
 
         (x,y,z),_ = get_rvec_tvec_from_affine_matrix(
             self.scene.selected_object.pose)    
-        self.manual_pose_x.set(0.0)    #x[0])              #set first spinbox values to current pose
-        self.manual_pose_y.set(0.0)    #y[0])
-        self.manual_pose_z.set(0.0)    #z[0])
-    
+        self.manual_pose_x.set(float(x))              #set first spinbox values to current pose
+        self.manual_pose_y.set(float(y))
+        self.manual_pose_z.set(float(z))
+
     def _change_initial_guess(self):
         if self.scene.selected_object is not None:
             (x,y,z),(rho,phi,theta)=get_rvec_tvec_from_affine_matrix(
                 self.scene.selected_object.pose)
             if self.manual_pose_x.get():
-                x = self.manual_pose_x.get().replace('\U00002013', '-')  # user inputs in spinbox
+                x = self.manual_pose_x.get()  # user inputs in spinbox
             if self.manual_pose_y.get():
                 y = self.manual_pose_y.get()
             if self.manual_pose_z.get():
                 z = self.manual_pose_z.get()
             self.registrator.move_pose(
                 self.scene.selected_object,
-                x[0],y[0],z[0]
+                x,y,z
                 )
+
             self._preview_buffer()      # paint new mesh
 
     def _on_capture(self):
