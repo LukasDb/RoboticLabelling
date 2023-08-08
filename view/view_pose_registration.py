@@ -65,7 +65,7 @@ class ViewPoseRegistration(Observer, ttk.Frame):
             text="Orientation:"
         )
         
-        def sb():
+        def sb_pos():
             return ttk.Spinbox(
             control_frame,
             from_=-1.0,
@@ -73,14 +73,23 @@ class ViewPoseRegistration(Observer, ttk.Frame):
             increment=0.05,
             command= lambda : self._change_initial_guess(),
             )
+        def sb_rot():
+            #seperat spinbox for rotation
+            return ttk.Spinbox(
+            control_frame,
+            from_=-180,
+            to=180,
+            increment=5,
+            command= lambda : self._change_initial_guess(),
+            )
         
-        self.manual_pose_x = sb()    # boxes for position user input
-        self.manual_pose_y = sb()
-        self.manual_pose_z = sb()
+        self.manual_pose_x = sb_pos()    # boxes for position user input
+        self.manual_pose_y = sb_pos()
+        self.manual_pose_z = sb_pos()
 
-        self.manual_pose_rho = sb()    # for angles
-        self.manual_pose_phi = sb()
-        self.manual_pose_theta = sb()
+        self.manual_pose_rho = sb_rot()    # for angles
+        self.manual_pose_phi = sb_rot()
+        self.manual_pose_theta = sb_rot()
 
         pady = 5
         pady_L = 20
@@ -148,7 +157,7 @@ class ViewPoseRegistration(Observer, ttk.Frame):
             if self.manual_pose_y.get():
                 phi = self.manual_pose_phi.get()
             if self.manual_pose_z.get():
-                theta = self.manual_pose_theta.get()    
+                theta = self.manual_pose_theta.get()
 
             self.registrator.move_pose(
                 self.scene.selected_object,

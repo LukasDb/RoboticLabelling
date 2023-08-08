@@ -5,7 +5,7 @@ from typing import List
 from dataclasses import dataclass
 
 from model.scene import Scene
-from lib.geometry import invert_homogeneous,get_affine_matrix_from_r_t
+from lib.geometry import invert_homogeneous,get_affine_matrix_from_euler
 
 import time
 
@@ -55,10 +55,8 @@ class PoseRegistrator:
             obj.register_pose(monitor_pose)
 
     def move_pose(self,obj,x,y,z,rho,phi,theta):
-        #obj.pose[0,3] = x
-        #obj.pose[1,3] = y
-        #obj.pose[2,3] = z
-        obj.pose = get_affine_matrix_from_r_t([rho,phi,theta],[x,y,z])
+        #obj.pose = get_affine_matrix_from_r_t([rho,phi,theta],[x,y,z])
+        obj.pose = get_affine_matrix_from_euler([rho,phi,theta],[x,y,z])
         
 
 
