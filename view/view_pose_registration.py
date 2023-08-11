@@ -1,127 +1,188 @@
 import tkinter as tk
 from tkinter import ttk
-from model.scene import Scene
-from control.pose_registrator import PoseRegistrator
 from scipy.spatial.transform import Rotation as R
+import itertools as it
+from typing import List
+from lib.geometry import get_rvec_tvec_from_affine_matrix
+
+from model.scene import Scene
+from model.observer import Event, Observable, Observer
+from view.resizable_image import ResizableImage
+from control.pose_registrator import PoseRegistrator, Datapoint
 
 
-class ViewPoseRegistration(ttk.Frame):
+class ViewPoseRegistration(Observer, ttk.Frame):
     def __init__(self, parent, scene: Scene, registrator: PoseRegistrator) -> None:
-        super().__init__(parent)
+        ttk.Frame.__init__(self, parent)
         self.scene = scene
+        self.listen_to(self.scene)
         self.registrator = registrator
 
         self.title = ttk.Label(self, text="2. Pose Registration")
         self.title.grid()
 
-        self.camera_selection = ttk.Combobox(
-            self, values=[c.name for c in self.scene.cameras.values()]
-        )
-        self.camera_selection.grid()
+        controls = self.setup_controls(self)
+        previews = self.setup_previews(self)
+
+        controls.grid(row=1, column=1, sticky=tk.NSEW)
+        previews.grid(row=1, column=0, sticky=tk.NSEW)
+
+    def update_observer(self, subject: Observable, event: Event, *args, **kwargs):
+        if event == Event.OBJECT_ADDED:
+            # configure choices for object selection
+            self.object_selection.configure(
+                values=[o.name for o in self.scene.objects.values()]
+            )
+
+    def setup_controls(self, parent):
+        control_frame = ttk.Frame(parent)
 
         self.object_selection = ttk.Combobox(
-            self, values=[o.name for o in self.scene.objects]
+            control_frame, values=[o.name for o in self.scene.objects.values()]
         )
-        self.object_selection.grid()
+        self.object_selection.bind(
+            "<<ComboboxSelected>>", lambda _: self._on_object_selected()
+        )
 
-        self.position = tk.Label(self)
-        self.position.grid()
+        self.capture_button = ttk.Button(
+            control_frame, text="Capture Image", command=self._on_capture
+        )
 
-        self.orientation = tk.Label(self)
-        self.orientation.grid()
+        # add button
+        self.update_button = ttk.Button(
+            control_frame,
+            text="Optimize",
+            command=self.registrator.optimize_pose,
+        )
 
-        # self.update_button = ttk.Button(
-        #     self, text="Update", command=registrator.update_pose
-        # )
-        # self.update_button.grid()
+        # add button to move object pose
+        self.position_label = ttk.Label(
+            control_frame, 
+            text="Position:"
+        )
+        self.orientation_label = ttk.Label(
+            control_frame, 
+            text="Orientation:"
+        )
+        
+        def sb_pos():
+            return ttk.Spinbox(
+            control_frame,
+            from_=-1.0,
+            to=1.0,
+            increment=0.05,
+            command= lambda : self._change_initial_guess(),
+            )
+        def sb_rot():
+            #seperat spinbox for rotation
+            return ttk.Spinbox(
+            control_frame,
+            from_=-180,
+            to=180,
+            increment=5,
+            command= lambda : self._change_initial_guess(),
+            )
+        
+        self.manual_pose_x = sb_pos()    # boxes for position user input
+        self.manual_pose_y = sb_pos()
+        self.manual_pose_z = sb_pos()
 
-        # self.reset_button = ttk.Button(
-        #     self, text="Reset", command=registrator.reset_pose
-        # )
+        self.manual_pose_rho = sb_rot()    # for angles
+        self.manual_pose_phi = sb_rot()
+        self.manual_pose_theta = sb_rot()
 
-        self.live_preview = tk.Label(self)
-        self.live_preview.grid()
+        pady = 5
+        pady_L = 20
+        self.capture_button.grid(pady=pady)
+        self.object_selection.grid(pady=pady)
+        self.position_label.grid(pady=pady_L)
+        self.manual_pose_x.grid(pady=pady)
+        self.manual_pose_y.grid(pady=pady)
+        self.manual_pose_z.grid(pady=pady)
+        self.orientation_label.grid(pady=pady_L)
+        self.manual_pose_rho.grid(pady=pady)
+        self.manual_pose_phi.grid(pady=pady)
+        self.manual_pose_theta.grid(pady=pady)
+        self.update_button.grid(pady=pady_L)
 
-        self.selected_image = tk.Label(self)
-        self.selected_image.grid()
+        return control_frame
 
-        # st.title("2. Pose Registration")
-        # c1, c2 = st.columns(2)
+    def setup_previews(self, parent):
+        preview_frame = ttk.Frame(parent)
+        preview_frame.columnconfigure(0, weight=1)
+        preview_frame.columnconfigure(1, weight=1)
+        preview_frame.rowconfigure(0, weight=1)
+        preview_frame.rowconfigure(1, weight=1)
 
-        # selected_camera = c2.selectbox("Select Camera", ["Camera 1", "Camera 2"])
-        # selected_object = c2.selectbox("Select Object", ["Object 1", "Object 2"])
-        # c2.divider()
+        prev0 = ResizableImage(preview_frame, bg="#000000")
+        prev0.grid(row=0, column=0, sticky=tk.NSEW)
 
-        # registrator = PoseRegistrator()
+        prev1 = ResizableImage(preview_frame, bg="#000000")
+        prev1.grid(row=0, column=1, sticky=tk.NSEW)
 
-        # pos = registrator.get_position()
-        # orn = registrator.get_orientation().as_euler("xyz", degrees=True)
-        # st.session_state.reg_x = pos[0]
-        # st.session_state.reg_y = pos[1]
-        # st.session_state.reg_z = pos[2]
-        # st.session_state.reg_φ = orn[0]
-        # st.session_state.reg_θ = orn[1]
-        # st.session_state.reg_ψ = orn[2]
+        prev2 = ResizableImage(preview_frame, bg="#000000")
+        prev2.grid(row=1, column=0, sticky=tk.NSEW)
 
-        # t_rot = c2.columns(2)
-        # update_pos = lambda: registrator.set_position(
-        #     [st.session_state.reg_x, st.session_state.reg_y, st.session_state.reg_z]
-        # )
-        # update_rot = lambda: registrator.set_orientation(
-        #     R.from_euler(
-        #         "xyz",
-        #         [
-        #             st.session_state.reg_φ,
-        #             st.session_state.reg_θ,
-        #             st.session_state.reg_ψ,
-        #         ],
-        #         degrees=True,
-        #     )
-        # )
-        # t_rot[0].number_input("X", key="reg_x", on_change=update_pos, format="%.3f")
-        # t_rot[0].number_input("Y", key="reg_y", on_change=update_pos, format="%.3f")
-        # t_rot[0].number_input("Z", key="reg_z", on_change=update_pos, format="%.3f")
-        # t_rot[1].number_input(
-        #     "φ", key="reg_φ", on_change=update_rot, step=5.0, format="%.1f"
-        # )
-        # t_rot[1].number_input(
-        #     "θ", key="reg_θ", on_change=update_rot, step=5.0, format="%.1f"
-        # )
-        # t_rot[1].number_input(
-        #     "ψ", key="reg_ψ", on_change=update_rot, step=5.0, format="%.1f"
-        # )
+        prev3 = ResizableImage(preview_frame, bg="#000000")
+        prev3.grid(row=1, column=1, sticky=tk.NSEW)
 
-        # c2.divider
-        # pose_controls = c2.columns(2)
-        # if pose_controls[0].button("Optimize Pose"):
-        #     registrator.optimize_pose()
-        # if pose_controls[1].button("Reset Pose"):
-        #     registrator.reset()
-        #     st.experimental_rerun()
+        self.previews = [prev0, prev1, prev2, prev3]
+        return preview_frame
 
-        # c2.divider()
-        # img_control = c2.columns(2)
-        # if img_control[0].button("Capture Image"):
-        #     registrator.capture_image()
+    def _on_object_selected(self):
+        self.scene.select_object_by_name(self.object_selection.get())
+        self._preview_buffer()
 
-        # if img_control[1].button("Delete Captured Images"):
-        #     registrator.clear_cache()
+        (rho,phi,theta),(x,y,z) = get_rvec_tvec_from_affine_matrix(
+            self.scene.selected_object.pose)    
+        self.manual_pose_x.set(float(x))              #set first spinbox values to current pose
+        self.manual_pose_y.set(float(y))
+        self.manual_pose_z.set(float(z))
+        self.manual_pose_rho.set(float(rho))
+        self.manual_pose_phi.set(float(phi))
+        self.manual_pose_theta.set(float(theta))
 
-        # sel_img_index = c2.radio(
-        #     "Captured Images",
-        #     list(range(len(registrator._captured_images))),
-        #     format_func=lambda x: f"Image {x:2}",
-        # )
+    def _change_initial_guess(self):
+        if self.scene.selected_object is not None:
+            (rho,phi,theta),(x,y,z)=get_rvec_tvec_from_affine_matrix(
+                self.scene.selected_object.pose)
+            if self.manual_pose_x.get():
+                x = self.manual_pose_x.get()  # user inputs in spinbox
+            if self.manual_pose_y.get():
+                y = self.manual_pose_y.get()
+            if self.manual_pose_z.get():
+                z = self.manual_pose_z.get()
+            if self.manual_pose_x.get():
+                rho = self.manual_pose_rho.get()  # orientation values
+            if self.manual_pose_y.get():
+                phi = self.manual_pose_phi.get()
+            if self.manual_pose_z.get():
+                theta = self.manual_pose_theta.get()
 
-        # live = registrator.get_live_img()
-        # sel_img = registrator.get_selected_img(sel_img_index)
+            self.registrator.move_pose(
+                self.scene.selected_object,
+                x,y,z,
+                rho,phi,theta
+                )
 
-        # c1.image(
-        #     live,
-        #     caption="Live preview",
-        # )
-        # if sel_img is not None:
-        #     c1.image(
-        #         sel_img,
-        #         caption="Selected Image",
-        #     )
+            self._preview_buffer()      # paint new mesh
+
+    def _on_capture(self):
+        self.registrator.capture_image()
+        self._preview_buffer()
+
+    def _preview_buffer(self):
+        for datapoint, preview in zip(self.registrator.datapoints[-4:], self.previews):
+            if datapoint is None:
+                continue
+
+            img = datapoint.rgb.copy()
+            if self.scene.selected_object is not None:
+                img = self.registrator.draw_registered_object(
+                    self.scene.selected_object,
+                    img,
+                    datapoint.pose,
+                    datapoint.intrinsics,
+                    datapoint.dist_coeffs,
+                )
+            preview.set_image(img)

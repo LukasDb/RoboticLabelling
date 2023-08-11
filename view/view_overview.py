@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
+from tkinter.colorchooser import askcolor
 import threading
 from typing import Dict
 import numpy as np
@@ -7,19 +8,28 @@ import time
 
 from model.scene import Scene
 from model.camera.camera import Camera
+from model.labelled_object import LabelledObject
 from model.observer import Observer, Event
 from view.resizable_image import ResizableImage
 from control.camera_calibration import CameraCalibrator
+from control.pose_registrator import PoseRegistrator
 
 
 class Overview(Observer, tk.Frame):
-    def __init__(self, parent, scene: Scene, calibrator: CameraCalibrator) -> None:
+    def __init__(
+        self,
+        parent,
+        scene: Scene,
+        calibrator: CameraCalibrator,
+        registrator: PoseRegistrator,
+    ) -> None:
         # TODO semantics editor: create an object, by selecting a mesh and a label
         # TODO show available cameras
         tk.Frame.__init__(self, parent)
         Observer.__init__(self)
         self._scene = scene
         self._calibrator = calibrator
+        self._registrator = registrator
         self.listen_to(self._scene)
 
         self._cam_rows: Dict[str, Dict] = {}
@@ -60,7 +70,11 @@ class Overview(Observer, tk.Frame):
             )
 
         elif event == Event.OBJECT_ADDED:
+            self.listen_to(kwargs["object"])
             self._add_object_row(kwargs["object"])
+
+        elif event == Event.OBJECT_REGISTERED:
+            self._update_object_row(subject.name)
 
         elif event == Event.ROBOT_ADDED:
             for cam in self._scene.cameras.values():
@@ -167,8 +181,9 @@ class Overview(Observer, tk.Frame):
         self.object_overview = tk.Frame(parent)
         self.object_overview.columnconfigure(0, weight=1)
         self.object_overview.columnconfigure(1, weight=1)
+        self.object_overview.columnconfigure(2, weight=1)
 
-        columns = ["Object", "Plyfile"]
+        columns = ["Object", "Registered?", "Color"]
         for i, c in enumerate(columns):
             label = tk.Label(self.object_overview, text=c)
             label.grid(row=0, column=i, sticky=tk.EW)
@@ -181,27 +196,40 @@ class Overview(Observer, tk.Frame):
 
         return self.object_overview
 
-    def _add_object_row(self, c):
+    def _add_object_row(self, obj: LabelledObject):
         # add object name
         row_num = len(self._object_rows) + 2  # because of separator
         obj_name = tk.Label(self.object_overview)
         obj_name.grid(row=row_num, column=0, sticky=tk.EW, pady=2)
         # add pose
-        plyfile = tk.Label(self.object_overview)
-        plyfile.grid(row=row_num, column=1, sticky=tk.EW)
+        registered = tk.Label(self.object_overview)
+        registered.grid(row=row_num, column=1, sticky=tk.EW)
 
-        self._object_rows[c.name] = {
+        color = tk.Label(self.object_overview)
+        color.grid(row=row_num, column=2, sticky=tk.EW)
+        # add callback on click
+        color.bind(
+            "<Button-1>",
+            lambda event: self._on_object_color_click(obj),
+        )
+
+        self._object_rows[obj.name] = {
             "obj_name": obj_name,
-            "plyfile": plyfile,
+            "registered": registered,
+            "color": color,
         }
         # update values
-        self._update_object_row(c.name)
+        self._update_object_row(obj.name)
 
     def _update_object_row(self, obj_name):
         obj = self._scene.objects[obj_name]
         row = self._object_rows[obj_name]
         row["obj_name"].configure(text=f"{obj.name}")
-        row["plyfile"].configure(text=f"{str(obj.mesh_path)}")
+        row["registered"].configure(
+            text="Yes" if obj.registered else "No",
+            fg="green" if obj.registered else "red",
+        )
+        row["color"].configure(bg="#%02x%02x%02x" % tuple(obj.semantic_color))
 
     def _on_attach_cam(self, cam_unique_id, parent):
         if parent.get() == "-":
@@ -234,9 +262,21 @@ class Overview(Observer, tk.Frame):
             frame = selected_cam.get_frame()
             img = frame.rgb
 
+
             img = self._calibrator.draw_calibration(img)
+            img = self._registrator.draw_registered_objects(
+                img,
+                selected_cam.pose,
+                selected_cam.intrinsic_matrix,
+                selected_cam.dist_coeffs,
+            )
 
             if img is not None:
                 self.live_canvas.set_image(img)
             else:
                 self.live_canvas.clear_image()
+
+    def _on_object_color_click(self, obj: LabelledObject):
+        colors = askcolor(title="Object Semantic Color")
+        obj.semantic_color = colors[0]
+        self._update_object_row(obj.name)

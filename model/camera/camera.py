@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod, abstractproperty
 
 from model.entity import Entity
 from ..entity import Entity
-from ..observer import Subject, Event
+from ..observer import Observable, Event
 from dataclasses import dataclass
 import numpy as np
 from typing import Dict
@@ -16,10 +16,10 @@ class CamFrame:
     depth_R: np.ndarray | None = None
 
 
-class Camera(Entity, Subject, ABC):
+class Camera(Entity, Observable, ABC):
     def __init__(self, name: str):
         Entity.__init__(self, name)
-        Subject.__init__(self)
+        Observable.__init__(self)
         self._intrinsics: np.ndarray | None = None
         self._dist_coeffs: np.ndarray | None = None
 

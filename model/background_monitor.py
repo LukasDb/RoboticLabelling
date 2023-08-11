@@ -4,6 +4,7 @@ from tkinter import ttk
 from .entity import Entity
 from PIL import Image, ImageTk
 import cv2
+import logging
 from lib.geometry import *
 
 
@@ -56,7 +57,7 @@ class BackgroundMonitor(Entity):
         # MOCK FOR NOW
         if True:
             # overwrite to monitor from lab
-            print("\nUSING MOCK MONITOR DIMENSIONS\n")
+            logging.warn("USING MOCK MONITOR DIMENSIONS")
             self.screen_height = 2160
             self.screen_width = 3840
             diagonal_16_by_9 = np.linalg.norm((16, 9))

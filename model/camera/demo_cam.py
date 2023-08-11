@@ -28,10 +28,8 @@ class DemoCam(Camera):
             robot_pose = np.loadtxt(str(pose_path))
 
         # update mock robot pose
-        try:
+        if self.parent is not None:
             self.parent.pose = robot_pose
-        except AttributeError:
-            pass
 
         time.sleep(0.5)
         return CamFrame(rgb=img)

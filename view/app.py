@@ -9,7 +9,7 @@ from model.scene import Scene
 from model.fanuc_crx10ial import FanucCRX10iAL
 from model.demo_robot import MockRobot
 from model.camera.realsense import Realsense
-from model.camera.zed import ZedCamera
+#from model.camera.zed import ZedCamera
 from model.camera.demo_cam import DemoCam
 from model.labelled_object import LabelledObject
 
@@ -20,6 +20,12 @@ from .view_overview import Overview
 from .view_calibration import ViewCalibration
 from .view_pose_registration import ViewPoseRegistration
 from .view_acquisition import ViewAcquisition
+
+import logging
+import coloredlogs
+
+coloredlogs.install()
+logging.basicConfig(level=logging.DEBUG)
 
 
 class App:
@@ -34,7 +40,7 @@ class App:
         self.scene = Scene()
         # --- load controllers ---
         self.calibrator = CameraCalibrator(self.scene)
-        self.pose_registrator = PoseRegistrator()
+        self.pose_registrator = PoseRegistrator(self.scene)
 
         ## ---  build GUI ---
         self.menubar = tk.Menu(self.root)
@@ -54,11 +60,12 @@ class App:
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
         self.root.rowconfigure(1, weight=1)
-        self.overview = Overview(self.root, self.scene, self.calibrator)
+        self.overview = Overview(
+            self.root, self.scene, self.calibrator, self.pose_registrator
+        )
         tabs = ttk.Notebook(self.root)
         self.overview.grid(sticky=tk.NSEW, pady=10)
         tabs.grid(sticky=tk.NSEW, pady=10)
-
 
         self.cal = ViewCalibration(tabs, self.scene, self.calibrator)
         tabs.add(self.cal, text="1. Camera Calibration")
@@ -82,11 +89,10 @@ class App:
         for cam in Realsense.get_available_devices():
             self.scene.add_camera(cam)
 
-        for cam in ZedCamera.get_available_devices():
-            self.scene.add_camera(cam)
+        #for cam in ZedCamera.get_available_devices():
+        #    self.scene.add_camera(cam)
 
     def run(self):
-        print("Running...")
         tk.mainloop()
 
     def _on_load_config(self):
@@ -99,8 +105,12 @@ class App:
 
         self.calibrator.load(data["camera_calibration"])
 
-        for name, mesh_path in data["objects"].items():
-            obj = LabelledObject(name, mesh_path)
+        for obj_data in data["objects"]:
+            obj = LabelledObject(
+                obj_data["name"], obj_data["mesh_path"], obj_data["semantic_color"]
+            )
+            if obj_data["registered"]:
+                obj.register_pose(obj_data["pose"])
             self.scene.add_object(obj)
 
     def _on_save_config(self):
@@ -114,9 +124,16 @@ class App:
         )
         data = {
             "camera_calibration": self.calibrator.dump(),
-            "objects": {
-                name: obj.mesh_path for name, obj in self.scene.objects.items()
-            },
+            "objects": [
+                {
+                    "name": name,
+                    "mesh_path": obj.mesh_path,
+                    "pose": obj.pose,
+                    "registered": obj.registered,
+                    "semantic_color": obj.semantic_color,
+                }
+                for name, obj in self.scene.objects.items()
+            ],
         }
 
         with Path(file.name).open("wb") as f:
@@ -134,4 +151,6 @@ class App:
         path = Path(file.name)
 
         new_object = LabelledObject(path.stem, path)
+        monitor_pose = self.scene.background.pose
+        new_object.pose = monitor_pose  # add this as inital position
         self.scene.add_object(new_object)

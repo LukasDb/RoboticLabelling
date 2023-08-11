@@ -3,6 +3,7 @@ import numpy as np
 import requests
 import json
 from scipy.spatial.transform import Rotation as R
+import logging
 
 
 class FanucCRX10iAL(Robot):
@@ -21,7 +22,7 @@ class FanucCRX10iAL(Robot):
         try:
             req = requests.get(url, timeout=1.0)
         except requests.exceptions.Timeout:
-            print(f"Can not reach robot: {self.name}")
+            logging.warn(f"Can not reach robot: {self.name}")
             return super().pose
         jdict = json.loads(req.text)
         pose, _ = self.__parse_remote_position(jdict)
@@ -30,7 +31,7 @@ class FanucCRX10iAL(Robot):
 
     @pose.setter
     def pose(self, pose: np.ndarray):
-        print("Cant *set* pose for robot; use move_to instead")
+        logging.warn("Cant *set* pose for robot; use move_to instead")
 
     def __parse_remote_position(self, result):
         pose = np.array(
