@@ -17,7 +17,7 @@ class LabelledObject(Observable, Entity):
         self.registered = False
 
         if semantic_color is None:
-            semantic_color = np.random.randint(0, 255, size=3)
+            semantic_color = np.random.randint(0, 255, size=3).tolist()
         self.semantic_color = semantic_color
 
     def register_pose(self, pose):

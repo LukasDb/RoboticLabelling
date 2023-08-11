@@ -9,8 +9,8 @@ import logging
 class Realsense(Camera):
     RGB_H = 1080
     RGB_W = 1920
-    DEPTH_H = 1280
-    DEPTH_W = 720
+    DEPTH_H = 720
+    DEPTH_W = 1280
 
     @staticmethod
     def get_available_devices() -> List["Realsense"]:
@@ -29,7 +29,7 @@ class Realsense(Camera):
 
         self._pipeline = rs.pipeline()
         self._config = config = rs.config()
-        config.enable_device(self._serial_number)
+        #config.enable_device(self._serial_number)
 
         pipeline_wrapper = rs.pipeline_wrapper(self._pipeline)
         try:
@@ -70,8 +70,9 @@ class Realsense(Camera):
         try:
             self._pipeline.start(self._config)
             self.is_started = True
-        except RuntimeError:
+        except RuntimeError as e:
             logging.error(f"Could not start camera stream ({self.name})")
+            logging.error(e)
 
     def get_frame(self) -> CamFrame:
         output = CamFrame()

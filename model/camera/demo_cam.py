@@ -37,3 +37,5 @@ class DemoCam(Camera):
     @property
     def unique_id(self) -> str:
         return self._unique_id
+    
+    
