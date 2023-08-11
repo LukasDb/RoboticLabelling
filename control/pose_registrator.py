@@ -1,4 +1,6 @@
 import numpy as np
+import open3d as o3d
+import os
 from scipy.spatial.transform import Rotation as R
 import cv2
 from typing import List
@@ -42,6 +44,24 @@ class PoseRegistrator:
             intrinsics=self._scene.selected_camera.intrinsic_matrix,
             dist_coeffs=self._scene.selected_camera.dist_coeffs,
         )
+        # save camera pose to file
+        folder = "demo_data"
+        index = len(self.datapoints)
+        pose_path = (f"{folder}/poses/{self._scene.selected_camera}/{index}.txt")
+        if not os.path.exists(os.path.dirname(pose_path)):
+            os.makedirs(os.path.dirname(pose_path))
+        np.savetxt(pose_path, datapoint.pose)
+        # save rgb image and depth to file
+        rgb_path = (f"{folder}/rgb/{self._scene.selected_camera}/{index}.png")
+        if not os.path.exists(os.path.dirname(rgb_path)):
+            os.makedirs(os.path.dirname(rgb_path))
+        cv2.imwrite(rgb_path, datapoint.rgb)
+        if datapoint.depth is not None:
+            depth_path = (f"{folder}/depth/{self._scene.selected_camera}/{index}.txt")  
+            if not os.path.exists(os.path.dirname(depth_path)):
+                os.makedirs(os.path.dirname(depth_path))
+            np.savetxt(depth_path, datapoint.depth)
+
         self.datapoints.append(datapoint)
         return datapoint
 
@@ -51,11 +71,17 @@ class PoseRegistrator:
         # TODO inform user about optimization result
         # TODO save optimized pose to the scene
         monitor_pose = self._scene.background.pose
+        monitor_points = monitor_pose @ np.asarray(obj.mesh.vertices).T
         for obj in self._scene.objects.values():
-            obj.register_pose(monitor_pose)
+            points = np.asarray(obj.mesh.vertices)
+            optimized_pose=o3d.pipelines.registration.registration_icp(
+                points,monitor_points)
+            #source, target, threshold, trans_init,
+            #o3d.registration.TransformationEstimationPointToPoint())
+            obj.register_pose(optimized_pose)
+
 
     def move_pose(self,obj,x,y,z,rho,phi,theta):
-        #obj.pose = get_affine_matrix_from_r_t([rho,phi,theta],[x,y,z])
         obj.pose = get_affine_matrix_from_euler([rho,phi,theta],[x,y,z])
         
 
