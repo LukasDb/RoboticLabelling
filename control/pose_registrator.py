@@ -45,13 +45,15 @@ class PoseRegistrator:
             intrinsics=self._scene.selected_camera.intrinsic_matrix,
             dist_coeffs=self._scene.selected_camera.dist_coeffs,
         )
+
         # save camera pose to file
+        """
         folder = "demo_data"
-        index = len(self.datapoints)+10
+        index = len(self.datapoints)
         pose_path = (f"{folder}/poses/{self._scene.selected_camera}/{index}.txt")
         if not os.path.exists(os.path.dirname(pose_path)):
             os.makedirs(os.path.dirname(pose_path))
-        np.savetxt(pose_path, datapoint.pose)
+        np.savetxt(pose_path, self._scene.selected_camera.parent.pose)
         # save rgb image and depth to file
         rgb_path = (f"{folder}/rgb/{self._scene.selected_camera}/{index}.png")
         if not os.path.exists(os.path.dirname(rgb_path)):
@@ -62,6 +64,7 @@ class PoseRegistrator:
             if not os.path.exists(os.path.dirname(depth_path)):
                 os.makedirs(os.path.dirname(depth_path))
             np.save(depth_path, datapoint.depth)
+        """
 
         self.datapoints.append(datapoint)
         return datapoint
@@ -71,14 +74,34 @@ class PoseRegistrator:
         # TODO optimize object pose over all images
         # TODO inform user about optimization result
         # TODO save optimized pose to the scene
-        monitor_pose = self._scene.background.pose
-        monitor_points = monitor_pose @ np.asarray(obj.mesh.vertices).T
         for obj in self._scene.objects.values():
-            points = np.asarray(obj.mesh.vertices)
-            optimized_pose=o3d.pipelines.registration.registration_icp(
-                points,monitor_points)
-            #source, target, threshold, trans_init,
-            #o3d.registration.TransformationEstimationPointToPoint())
+            for i in range(len(self.datapoints)):    # ICP in each image
+                depth = np.asarray(self.datapoints[i].depth)
+                print(depth[100:300,300:400])
+                W,H = depth.shape
+                intrinsic = o3d.cuda.pybind.camera.PinholeCameraIntrinsic(W,H,self._scene.selected_camera.intrinsic_matrix)
+                # create target point cloud from depth image
+                scale = 1000.0
+                target_large =  o3d.cuda.pybind.geometry.PointCloud.create_from_depth_image(
+                    o3d.geometry.Image(depth), 
+                    intrinsic = intrinsic, 
+                    extrinsic=np.asarray(self._scene.selected_camera.pose),
+                    depth_scale=scale,
+                    )
+                # create source point cloud from object mesh
+                points = o3d.cuda.pybind.geometry.PointCloud(obj.mesh.vertices)
+                source = points.transform(np.asarray(obj.pose))
+                o3d.visualization.draw_geometries([target_large])
+                o3d.visualization.draw_geometries([target_large,source])
+                # crop large target point cloud to bounding box of object               
+                bounding_box = source.get_axis_aligned_bounding_box()
+                target = target_large.crop(bounding_box)
+                o3d.visualization.draw_geometries([target])
+                print(bounding_box,target.compute_point_cloud_distance(source))
+                optimized_pose=o3d.pipelines.registration.registration_icp(
+                    source=source,
+                    target=target,
+                    estimation_method = o3d.pipelines.registration.TransformationEstimationPointToPlane())
             obj.register_pose(optimized_pose)
 
 

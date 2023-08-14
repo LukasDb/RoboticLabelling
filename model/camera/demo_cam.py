@@ -10,12 +10,13 @@ class DemoCam(Camera):
     def __init__(self, unique_id: str):
         super().__init__("MockCam")
         self._unique_id = unique_id
-        self.mock_cam = "realsense_121622061798"
+        self.mock_cam = "IntelRealSenseD415"
+        #self.mock_cam = "realsense_121622061798"
         # self.mock_cam = "realsense_f1120593"
         self.img_paths = cycle(Path(f"demo_data/images/{self.mock_cam}").glob("*.png"))
 
     def get_frame(self) -> CamFrame:
-        img_path = next(self.img_paths)
+        img_path = next(self.img_paths)            
         index = int(img_path.stem)
         img = cv2.imread(str(img_path))
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -26,13 +27,19 @@ class DemoCam(Camera):
         except Exception:
             pose_path = Path(f"demo_data/poses/{self.mock_cam}/{index:04}.txt")
             robot_pose = np.loadtxt(str(pose_path))
+        #read depth from npy file
+        try:
+            depth_path = Path(f"demo_data/depth/{self.mock_cam}/{index}.npz.npy")
+            depth = np.load(str(depth_path))
+        except Exception:
+            depth = None
 
         # update mock robot pose
         if self.parent is not None:
             self.parent.pose = robot_pose
 
         time.sleep(0.5)
-        return CamFrame(rgb=img)
+        return CamFrame(rgb=img,depth=depth)
 
     @property
     def unique_id(self) -> str:
