@@ -5,6 +5,7 @@ import threading
 from typing import Dict
 import numpy as np
 import time
+import cv2
 
 from model.scene import Scene
 from model.camera.camera import Camera
@@ -89,9 +90,7 @@ class Overview(Observer, tk.Frame):
             cam_select_frame, values=[c.unique_id for c in self._scene.cameras.values()]
         )
         self.camera_selection.set("")
-        self.camera_selection.bind(
-            "<<ComboboxSelected>>", self._on_camera_selection_change
-        )
+        self.camera_selection.bind("<<ComboboxSelected>>", self._on_camera_selection_change)
         camera_selection_label = tk.Label(cam_select_frame, text="Selected Camera")
         camera_selection_label.grid(row=0, column=0, padx=5, sticky=tk.NW)
         self.camera_selection.grid(row=0, column=1, sticky=tk.NW)
@@ -110,6 +109,8 @@ class Overview(Observer, tk.Frame):
         preview_frame.rowconfigure(0, weight=1)
         self.live_canvas = ResizableImage(preview_frame, bg="#000000")
         self.live_canvas.grid(sticky=tk.NSEW)
+        self.live_canvas2 = ResizableImage(preview_frame, bg="#000000")
+        self.live_canvas2.grid(sticky=tk.NSEW)
         return preview_frame
 
     def setup_camera_table(self, parent):
@@ -144,9 +145,7 @@ class Overview(Observer, tk.Frame):
         calibrated.grid(row=row_num, column=1, sticky=tk.EW)
         # add parent
         # parent = tk.Label(row)
-        parent = ttk.Combobox(
-            self.cam_overview, values=["-"] + list(self._scene.robots.keys())
-        )
+        parent = ttk.Combobox(self.cam_overview, values=["-"] + list(self._scene.robots.keys()))
         parent.set("-")
         parent.bind(
             "<<ComboboxSelected>>",
@@ -257,24 +256,35 @@ class Overview(Observer, tk.Frame):
 
             if selected_cam is None:
                 self.live_canvas.clear_image()
+                self.live_canvas2.clear_image()
                 continue
 
             frame = selected_cam.get_frame()
             img = frame.rgb
 
-
-            img = self._calibrator.draw_calibration(img)
-            img = self._registrator.draw_registered_objects(
-                img,
-                selected_cam.pose,
-                selected_cam.intrinsic_matrix,
-                selected_cam.dist_coeffs,
-            )
-
             if img is not None:
+                img = self._calibrator.draw_calibration(img)
+                img = self._registrator.draw_registered_objects(
+                    img,
+                    selected_cam.pose,
+                    selected_cam.intrinsic_matrix,
+                    selected_cam.dist_coeffs,
+                )
+
                 self.live_canvas.set_image(img)
             else:
                 self.live_canvas.clear_image()
+
+            if frame.depth is not None:
+                colored_depth = cv2.applyColorMap(
+                    cv2.convertScaleAbs(frame.depth, alpha=255 / 2.0), cv2.COLORMAP_JET
+                )
+                self.live_canvas2.set_image(colored_depth)
+            else:
+                self.live_canvas2.clear_image()
+
+            if frame.rgb_R is not None:
+                self.live_canvas2.set_image(frame.rgb_R)
 
     def _on_object_color_click(self, obj: LabelledObject):
         colors = askcolor(title="Object Semantic Color")
