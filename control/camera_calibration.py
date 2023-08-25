@@ -35,6 +35,11 @@ class CameraCalibrator:
 
         self.mock_i = 0
 
+    def reset(self):
+        self.captured_images.clear()
+        self.captured_robot_poses.clear()
+        self.calibration_results.clear()
+
     def load(self, cal_data: Dict):
         """load calibration from config dict"""
         self._scene.background.pose = cal_data["background_pose"]
@@ -73,11 +78,19 @@ class CameraCalibrator:
 
     def capture_image(self):
         img = self._scene.selected_camera.get_frame().rgb
-        pose = self._scene.selected_camera.parent.pose
-        if img is not None and pose is not None:
-            self.captured_images.append(img)
-            self.captured_robot_poses.append(pose)
-            self.calibration_results.append({"detected": False})
+        robot_pose = self._scene.selected_camera.parent.pose
+
+        if img is None:
+            logging.error("No image captured")
+            return
+
+        if robot_pose is None:
+            logging.error("No robot pose available")
+            return
+
+        self.captured_images.append(img)
+        self.captured_robot_poses.append(robot_pose)
+        self.calibration_results.append({"detected": False})
 
     def calibrate(self):
         if self.aruco_dict is None:
@@ -101,13 +114,9 @@ class CameraCalibrator:
             desc="Detecting markers",
         ):
             gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-            corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(
-                gray, self.aruco_dict
-            )
+            corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(gray, self.aruco_dict)
 
-            cal_result.update(
-                {"detected": len(corners) > 0, "corners": corners, "ids": ids}
-            )
+            cal_result.update({"detected": len(corners) > 0, "corners": corners, "ids": ids})
 
             if len(corners) > 0:
                 # SUB PIXEL DETECTION
@@ -124,11 +133,7 @@ class CameraCalibrator:
                 _, inter_corners, inter_ids = cv2.aruco.interpolateCornersCharuco(
                     corners, ids, gray, self.charuco_board
                 )
-                if (
-                    inter_corners is not None
-                    and inter_ids is not None
-                    and len(inter_corners) > 3
-                ):
+                if inter_corners is not None and inter_ids is not None and len(inter_corners) > 3:
                     allCorners.append(inter_corners)
                     allIds.append(inter_ids)
                     allImgs.append(img)
@@ -153,9 +158,7 @@ class CameraCalibrator:
 
         distCoeffsInit = np.zeros((5, 1))
         flags = (
-            cv2.CALIB_USE_INTRINSIC_GUESS
-            + cv2.CALIB_RATIONAL_MODEL
-            + cv2.CALIB_FIX_ASPECT_RATIO
+            cv2.CALIB_USE_INTRINSIC_GUESS + cv2.CALIB_RATIONAL_MODEL + cv2.CALIB_FIX_ASPECT_RATIO
         )
         # flags = (cv2.CALIB_RATIONAL_MODEL)
         logging.info("Calibrating intrinsics...")
@@ -187,8 +190,7 @@ class CameraCalibrator:
 
         logging.info("Calibrating extrinsics...")
         camera_poses = [
-            np.concatenate([tvec, rvec], axis=0)[:, 0]
-            for tvec, rvec in zip(tvecs, rvecs)
+            np.concatenate([tvec, rvec], axis=0)[:, 0] for tvec, rvec in zip(tvecs, rvecs)
         ]
         ret = self._optimize_handeye_matrix(camera_poses, allRobotPoses)
         logging.info("Done")
@@ -196,26 +198,20 @@ class CameraCalibrator:
         logging.info("Cost:       ", ret["cost"])
 
         x = ret["x"]
-        extrinsic_matrix = invert_homogeneous(
-            get_affine_matrix_from_6d_vector("xyz", x[:6])
-        )
-        world2markers = invert_homogeneous(
-            get_affine_matrix_from_6d_vector("xyz", x[6:])
-        )
+        extrinsic_matrix = invert_homogeneous(get_affine_matrix_from_6d_vector("xyz", x[:6]))
+        world2markers = invert_homogeneous(get_affine_matrix_from_6d_vector("xyz", x[6:]))
 
         self._scene.background.pose = world2markers @ self.markers2monitor
 
         # set camera atttributes
-        self._scene.selected_camera.set_calibration(
-            camera_matrix, dist_coeffs, extrinsic_matrix
-        )
+        self._scene.selected_camera.set_calibration(camera_matrix, dist_coeffs, extrinsic_matrix)
 
-    def draw_calibration(self, rgb) -> np.ndarray:
+    def draw_calibration(self, rgb: np.ndarray) -> np.ndarray:
         monitor = self._scene.background
         cam = self._scene.selected_camera
         if cam is None:
             return rgb
-        
+
         if cam.intrinsic_matrix is not None:
             cam2monitor = invert_homogeneous(cam.pose) @ monitor.pose
             monitor.draw_on_rgb(
@@ -300,9 +296,7 @@ class CameraCalibrator:
             n_markers[0], n_markers[1], chessboard_size, marker_size, self.aruco_dict
         )
 
-        logging.debug(
-            "Creating Charuco image with size: ", charuco_img_width, charuco_img_height
-        )
+        logging.debug("Creating Charuco image with size: ", charuco_img_width, charuco_img_height)
         charuco_img = self.charuco_board.draw(
             (round(charuco_img_width), round(charuco_img_height))
         )
@@ -327,9 +321,7 @@ class CameraCalibrator:
         self.markers2monitor[0, 3] = charuco_img_width_m / 2.0
         self.markers2monitor[1, 3] = charuco_img_height_m / 2.0
 
-        logging.warn(
-            f"Confirm the dimensions of the chessboard in the image: {chessboard_size}"
-        )
+        logging.warn(f"Confirm the dimensions of the chessboard in the image: {chessboard_size}")
         logging.warn(f"Confirm the dimensions of the markers in the image: {marker_size}")
 
     def _optimize_handeye_matrix(self, camera_poses, robot_poses):
@@ -341,9 +333,7 @@ class CameraCalibrator:
             for x in camera_poses
         ]
 
-        tool2wc_t = [
-            invert_homogeneous(x) for x in robot_poses  # already homogeneous matrix
-        ]
+        tool2wc_t = [invert_homogeneous(x) for x in robot_poses]  # already homogeneous matrix
 
         x0 = np.array([camera2tool_t, marker2wc_t]).reshape(12)
 
@@ -355,9 +345,7 @@ class CameraCalibrator:
         def res_func(marker2camera, tool2wc, camera2tool, marker2wc):
             res = []
             for i in range(len(marker2camera)):
-                res += single_res_func(
-                    marker2camera[i], tool2wc[i], camera2tool, marker2wc
-                )
+                res += single_res_func(marker2camera[i], tool2wc[i], camera2tool, marker2wc)
             return np.array(res).reshape(16 * len(marker2camera))
 
         def single_res_func(marker2camera, tool2wc, camera2tool, marker2wc):

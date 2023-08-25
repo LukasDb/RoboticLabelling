@@ -18,16 +18,18 @@ def get_affine_matrix_from_6d_vector(seq, vector):
     rotation = R.from_euler(seq, vector[3:])
     return homogeneous_mat_from_RT(rotation, vector[:3])
 
-def get_affine_matrix_from_r_t(r,t):    # input r: modified rodrigues parameters, t: position
+
+def get_affine_matrix_from_r_t(r, t):  # input r: modified rodrigues parameters, t: position
     A = np.eye(4)
-    A[:3,:3] = R.as_matrix(R.from_mrp(r))
-    A[:3,3] = t
+    A[:3, :3] = R.as_matrix(R.from_mrp(r))
+    A[:3, 3] = t
     return A
 
-def get_affine_matrix_from_euler(r,t):
+
+def get_affine_matrix_from_euler(r, t):
     A = np.eye(4)
-    A[:3,:3] = R.as_matrix(R.from_euler(seq='xyz',angles=r,degrees = True))
-    A[:3,3] = t
+    A[:3, :3] = R.as_matrix(R.from_euler(seq="xyz", angles=r, degrees=True))
+    A[:3, 3] = t
     return A
 
 
@@ -48,6 +50,13 @@ def homogeneous_mat_from_RT(rot, t):
         trans[:3, 3] = t
 
     return trans
+
+
+def get_euler_from_affine_matrix(affine):
+    rot = affine[:3, :3]
+    t = affine[:3, 3]
+    euler = R.from_matrix(rot.copy()).as_euler("xyz", degrees=True)
+    return euler, t
 
 
 def get_rvec_tvec_from_affine_matrix(affine):

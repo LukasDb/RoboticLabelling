@@ -105,7 +105,7 @@ class ViewCalibration(ttk.Frame):
         self.update_selected_image_preview()
 
     def on_delete(self):
-        self.calibrator.captured_images.clear()
+        self.calibrator.reset()
         self.image_selection["values"] = []
         self.image_selection.set("")
         self.selected_image_canvas.clear_image()

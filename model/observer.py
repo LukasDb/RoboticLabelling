@@ -1,5 +1,5 @@
 from enum import Enum, auto
-from typing import List
+from typing import List, Set
 import logging
 
 
@@ -14,10 +14,10 @@ class Event(Enum):
 
 class Observable:
     def __init__(self):
-        self.__observers: List["Observer"] = []
+        self.__observers: Set["Observer"] = set()
 
     def register(self, observer):
-        self.__observers.append(observer)
+        self.__observers.add(observer)
 
     def notify(self, event: Event, *args, **kwargs):
         logging.debug(f"[{self}]: {event}")

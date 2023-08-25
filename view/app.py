@@ -81,6 +81,7 @@ class App:
         mock_robot = MockRobot()
         self.scene.add_robot(mock_robot)
         self.scene.add_camera(DemoCam("Demo Cam"))
+        
 
         crx = FanucCRX10iAL()
         self.scene.add_robot(crx)

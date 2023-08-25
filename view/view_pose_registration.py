@@ -3,7 +3,7 @@ from tkinter import ttk
 from scipy.spatial.transform import Rotation as R
 import itertools as it
 from typing import List
-from lib.geometry import get_rvec_tvec_from_affine_matrix
+from lib.geometry import get_rvec_tvec_from_affine_matrix, get_euler_from_affine_matrix
 
 from model.scene import Scene
 from model.observer import Event, Observable, Observer
@@ -30,9 +30,12 @@ class ViewPoseRegistration(Observer, ttk.Frame):
     def update_observer(self, subject: Observable, event: Event, *args, **kwargs):
         if event == Event.OBJECT_ADDED:
             # configure choices for object selection
-            self.object_selection.configure(
-                values=[o.name for o in self.scene.objects.values()]
-            )
+            self.object_selection.configure(values=[o.name for o in self.scene.objects.values()])
+            self.listen_to(kwargs["object"])
+        elif event == Event.OBJECT_REGISTERED:
+            # update controls rerender buffer
+            self._update_gui_from_object_pose()
+            self._preview_buffer()
 
     def setup_controls(self, parent):
         control_frame = ttk.Frame(parent)
@@ -40,9 +43,7 @@ class ViewPoseRegistration(Observer, ttk.Frame):
         self.object_selection = ttk.Combobox(
             control_frame, values=[o.name for o in self.scene.objects.values()]
         )
-        self.object_selection.bind(
-            "<<ComboboxSelected>>", lambda _: self._on_object_selected()
-        )
+        self.object_selection.bind("<<ComboboxSelected>>", lambda _: self._on_object_selected())
 
         self.capture_button = ttk.Button(
             control_frame, text="Capture Image", command=self._on_capture
@@ -54,40 +55,45 @@ class ViewPoseRegistration(Observer, ttk.Frame):
             text="Optimize",
             command=self.registrator.optimize_pose,
         )
+        self.reset_pose_button = ttk.Button(
+            control_frame,
+            text="Reset Pose",
+            command=self._on_reset,
+        )
 
         # add button to move object pose
-        self.position_label = ttk.Label(
-            control_frame, 
-            text="Position:"
-        )
-        self.orientation_label = ttk.Label(
-            control_frame, 
-            text="Orientation:"
-        )
-        
+        self.position_label = ttk.Label(control_frame, text="Position:")
+        self.orientation_label = ttk.Label(control_frame, text="Orientation:")
+
         def sb_pos():
-            return ttk.Spinbox(
-            control_frame,
-            from_=-1.0,
-            to=1.0,
-            increment=0.05,
-            command= lambda : self._change_initial_guess(),
+            spinbox = ttk.Spinbox(
+                control_frame,
+                from_=-1.0,
+                to=1.0,
+                increment=0.05,
+                command=lambda: self._change_initial_guess(),
             )
+            # bind self._on_change to spinbox
+            spinbox.bind("<Return>", lambda _: self._change_initial_guess())
+            return spinbox
+
         def sb_rot():
-            #seperat spinbox for rotation
-            return ttk.Spinbox(
-            control_frame,
-            from_=-180,
-            to=180,
-            increment=5,
-            command= lambda : self._change_initial_guess(),
+            # seperat spinbox for rotation
+            spinbox = ttk.Spinbox(
+                control_frame,
+                from_=-180,
+                to=180,
+                increment=5,
+                command=lambda: self._change_initial_guess(),
             )
-        
-        self.manual_pose_x = sb_pos()    # boxes for position user input
+            spinbox.bind("<Return>", lambda _: self._change_initial_guess())
+            return spinbox
+
+        self.manual_pose_x = sb_pos()  # boxes for position user input
         self.manual_pose_y = sb_pos()
         self.manual_pose_z = sb_pos()
 
-        self.manual_pose_rho = sb_rot()    # for angles
+        self.manual_pose_rho = sb_rot()  # for angles
         self.manual_pose_phi = sb_rot()
         self.manual_pose_theta = sb_rot()
 
@@ -104,6 +110,7 @@ class ViewPoseRegistration(Observer, ttk.Frame):
         self.manual_pose_phi.grid(pady=pady)
         self.manual_pose_theta.grid(pady=pady)
         self.update_button.grid(pady=pady_L)
+        self.reset_pose_button.grid(pady=pady)
 
         return control_frame
 
@@ -132,10 +139,15 @@ class ViewPoseRegistration(Observer, ttk.Frame):
     def _on_object_selected(self):
         self.scene.select_object_by_name(self.object_selection.get())
         self._preview_buffer()
+        self._update_gui_from_object_pose()
 
-        (rho,phi,theta),(x,y,z) = get_rvec_tvec_from_affine_matrix(
-            self.scene.selected_object.pose)    
-        self.manual_pose_x.set(float(x))              #set first spinbox values to current pose
+    def _update_gui_from_object_pose(self):
+        (rho, phi, theta), (x, y, z) = get_euler_from_affine_matrix(
+            self.scene.selected_object.pose
+        )
+
+
+        self.manual_pose_x.set(float(x))  # set first spinbox values to current pose
         self.manual_pose_y.set(float(y))
         self.manual_pose_z.set(float(z))
         self.manual_pose_rho.set(float(rho))
@@ -144,8 +156,10 @@ class ViewPoseRegistration(Observer, ttk.Frame):
 
     def _change_initial_guess(self):
         if self.scene.selected_object is not None:
-            (rho,phi,theta),(x,y,z)=get_rvec_tvec_from_affine_matrix(
-                self.scene.selected_object.pose)
+            (rho, phi, theta), (x, y, z) = get_euler_from_affine_matrix(
+                self.scene.selected_object.pose
+            )
+
             if self.manual_pose_x.get():
                 x = self.manual_pose_x.get()  # user inputs in spinbox
             if self.manual_pose_y.get():
@@ -159,13 +173,9 @@ class ViewPoseRegistration(Observer, ttk.Frame):
             if self.manual_pose_z.get():
                 theta = self.manual_pose_theta.get()
 
-            self.registrator.move_pose(
-                self.scene.selected_object,
-                x,y,z,
-                rho,phi,theta
-                )
+            self.registrator.move_pose(self.scene.selected_object, x, y, z, rho, phi, theta)
 
-            self._preview_buffer()      # paint new mesh
+            self._preview_buffer()  # paint new mesh
 
     def _on_capture(self):
         self.registrator.capture_image()
@@ -186,3 +196,16 @@ class ViewPoseRegistration(Observer, ttk.Frame):
                     datapoint.dist_coeffs,
                 )
             preview.set_image(img)
+
+    def _on_reset(self):
+        monitor_pose = self.scene.background.pose
+        self.scene.selected_object.pose = monitor_pose  # add this as inital position
+        self._update_gui_from_object_pose()
+        self._preview_buffer()
+
+
+# good guess:
+# x :  0.42
+# y:  -0.58
+# z   -0.11
+# euler: [90, 0, 180]
