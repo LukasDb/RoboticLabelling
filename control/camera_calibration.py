@@ -201,6 +201,26 @@ class CameraCalibrator:
         extrinsic_matrix = invert_homogeneous(get_affine_matrix_from_6d_vector("xyz", x[:6]))
         world2markers = invert_homogeneous(get_affine_matrix_from_6d_vector("xyz", x[6:]))
 
+        # try OpenCV version
+        R_gripper2base = [x[:3, :3] for x in allRobotPoses]
+        t_gripper2base = [x[:3, 3] for x in allRobotPoses]
+        R_target2cam = rvecs
+        t_target2cam = tvecs
+        # R_cam2gripper = extrinsic_matrix[:3, :3]  # to be estimated
+        # t_cam2gripper = extrinsic_matrix[:3, 3]  # to be estamated
+        R_cam2gripper, t_cam2gripper = cv2.calibrateHandEye(
+            R_gripper2base,
+            t_gripper2base,
+            R_target2cam,
+            t_target2cam,
+            method=cv2.CALIB_HAND_EYE_TSAI,
+        )
+        print(f"My solution:\n{extrinsic_matrix}")
+        extrinsic_matrix = np.eye(4)
+        extrinsic_matrix[:3, :3] = R_cam2gripper
+        extrinsic_matrix[:3, 3] = np.reshape(t_cam2gripper, (3,))
+        print(f"OpenCV:\n{extrinsic_matrix}")
+
         self._scene.background.pose = world2markers @ self.markers2monitor
 
         # set camera atttributes

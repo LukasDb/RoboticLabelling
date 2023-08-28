@@ -19,7 +19,7 @@ class DemoCam(Camera):
         # self.mock_cam = "realsense_f1120593" #  old
         # self.mock_cam = "0_Intel RealSense D415"
         # self.mock_cam = "1_Intel RealSense D415"
-        self.mock_cam = None
+        self.data_folder = None
         self.img_paths = None
         self.img_index = 0
         self.n_images = 0
@@ -66,8 +66,8 @@ class DemoCam(Camera):
     def _on_data_selected(self):
         # updatet indices for slider
         with self.lock:
-            self.mock_cam = self.selectbox.get()
-            img_path = Path(f"{self.mock_cam}/images").glob("*.png")
+            self.data_folder = self.selectbox.get()
+            img_path = Path(f"{self.data_folder}/images").glob("*.png")
             self.n_images = len(list(img_path))
             self.slider.configure(to=self.n_images - 1)
             self.slider.set(0)
@@ -78,7 +78,7 @@ class DemoCam(Camera):
         return frame
 
     def _get_frame(self) -> CamFrame:
-        if self.mock_cam is None:
+        if self.data_folder is None:
             return CamFrame()
 
         if self.auto_play:
@@ -89,20 +89,20 @@ class DemoCam(Camera):
                 self.last_t = time.time()
 
         # img_path = next(self.img_paths)
-        img_path = Path(f"{self.mock_cam}/images/{self.img_index}.png")
+        img_path = Path(f"{self.data_folder}/images/{self.img_index}.png")
         img = cv2.imread(str(img_path))
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         depth = None
 
         try:
-            depth = np.load(f"{self.mock_cam}/depth/{self.img_index}.npz.npy")
+            depth = np.load(f"{self.data_folder}/depth/{self.img_index}.npz.npy")
         except Exception as e:
             pass
 
-        pose_path = Path(f"{self.mock_cam}/poses/{self.img_index}.txt")
+        pose_path = Path(f"{self.data_folder}/poses/{self.img_index}.txt")
         robot_pose = np.loadtxt(str(pose_path))
 
-        if "0_Intel RealSense D415" in self.mock_cam and self._link_matrix is not None:
+        if "0_Intel RealSense D415" in self.data_folder and self._link_matrix is not None:
             # accidentally saved camera pose instead of robot pose
             robot_pose = robot_pose @ np.linalg.inv(self._link_matrix)
 
