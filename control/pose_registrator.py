@@ -15,6 +15,7 @@ from lib.geometry import (
     invert_homogeneous,
     get_affine_matrix_from_euler,
     get_affine_matrix_from_6d_vector,
+    get_6d_vector_from_affine_matrix,
 )
 
 import time
@@ -119,27 +120,35 @@ class PoseRegistrator:
             result = o3d.pipelines.registration.registration_icp(
                 obj_points,
                 target_pcl,
-                0.01,
+                0.02,
                 initial_guess,
                 o3d.pipelines.registration.TransformationEstimationPointToPoint(),  # TransformationEstimationPointToPlane(),
             )
 
             if result.fitness < 0.5:
-                logging.warning(f"ICP fitness too low: {result.fitness}")
                 continue
 
-            icp_RT = datapoint.pose @ result.transformation  # ICP is in camera frame
+            icp_RT = result.transformation  # ICP is in camera frame
             self.valid_campose_icp.append((datapoint.pose, icp_RT))
 
+        valid_frac = len(self.valid_campose_icp) / len(self.datapoints)
+        
+
+        logging.info(
+            f"Using {len(self.valid_campose_icp)}/{len(self.datapoints)} ({valid_frac*100:.1f}%) datapoints for optimization."
+        )
+
         ret = self._optimize_object_pose(
-            [x[0] for x in self.valid_campose_icp], [x[1] for x in self.valid_campose_icp]
+            obj.pose,
+            [x[0] for x in self.valid_campose_icp],
+            [x[1] for x in self.valid_campose_icp],
         )
 
         logging.info("Done")
         logging.info(f"Optimality: {ret['optimality']}")
         logging.info(f"Cost:       {ret['cost']}")
         x = ret["x"]
-        world2object = get_affine_matrix_from_6d_vector("xyz", x)
+        world2object = x.reshape((4, 4))
         logging.info(f"Result:\n{world2object}")
 
         self._scene.selected_object.register_pose(world2object)
@@ -179,20 +188,12 @@ class PoseRegistrator:
             cv2.circle(rgb, tuple(point[0]), 4, obj.semantic_color, -1)
         return rgb
 
-    def _optimize_object_pose(self, world2camera, camera2object):
-        world2object = np.zeros((6,))
-
-        x0 = world2object
-
-        def residual(x, world2camera, camera2object):
-            world2object = get_affine_matrix_from_6d_vector("xyz", x)
-            return res_func(world2object, world2camera, camera2object)
-
-        def res_func(world2object, world2camera, camera2object):
+    def _optimize_object_pose(self, world2object, world2camera, camera2object):
+        def residual(world2object_, world2camera, camera2object):
             res = []
+            world2object = world2object_.reshape((4, 4))
             for i in range(len(world2camera)):
                 res += single_res_func(world2camera[i], camera2object[i], world2object)
-
             return np.array(res).reshape(16 * len(world2camera))
 
         def single_res_func(world2camera, camera2object, world2object):
@@ -201,7 +202,7 @@ class PoseRegistrator:
 
         ret = optimize.least_squares(
             residual,
-            x0,
+            world2object.reshape((16,)),
             kwargs={"world2camera": world2camera, "camera2object": camera2object},
         )
         return ret

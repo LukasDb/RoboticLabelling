@@ -19,13 +19,16 @@ class ViewPoseRegistration(Observer, ttk.Frame):
         self.registrator = registrator
 
         self.title = ttk.Label(self, text="2. Pose Registration")
-        self.title.grid()
+        self.title.grid(columnspan=2)
 
         controls = self.setup_controls(self)
         previews = self.setup_previews(self)
 
         controls.grid(row=1, column=1, sticky=tk.NSEW)
         previews.grid(row=1, column=0, sticky=tk.NSEW)
+
+        self.columnconfigure(0, weight=1)
+        self.columnconfigure(1, minsize=300, weight=1)
 
     def update_observer(self, subject: Observable, event: Event, *args, **kwargs):
         if event == Event.OBJECT_ADDED:
@@ -58,6 +61,11 @@ class ViewPoseRegistration(Observer, ttk.Frame):
         self.reset_pose_button = ttk.Button(
             control_frame,
             text="Reset Pose",
+            command=self._on_reset_pose,
+        )
+        self.reset_button = ttk.Button(
+            control_frame,
+            text="Reset",
             command=self._on_reset,
         )
 
@@ -70,7 +78,7 @@ class ViewPoseRegistration(Observer, ttk.Frame):
                 control_frame,
                 from_=-1.0,
                 to=1.0,
-                increment=0.05,
+                increment=0.01,
                 command=lambda: self._change_initial_guess(),
             )
             # bind self._on_change to spinbox
@@ -83,7 +91,7 @@ class ViewPoseRegistration(Observer, ttk.Frame):
                 control_frame,
                 from_=-180,
                 to=180,
-                increment=5,
+                increment=10,
                 command=lambda: self._change_initial_guess(),
             )
             spinbox.bind("<Return>", lambda _: self._change_initial_guess())
@@ -111,6 +119,7 @@ class ViewPoseRegistration(Observer, ttk.Frame):
         self.manual_pose_theta.grid(pady=pady)
         self.update_button.grid(pady=pady_L)
         self.reset_pose_button.grid(pady=pady)
+        self.reset_button.grid(pady=pady)
 
         return control_frame
 
@@ -145,7 +154,6 @@ class ViewPoseRegistration(Observer, ttk.Frame):
         (rho, phi, theta), (x, y, z) = get_euler_from_affine_matrix(
             self.scene.selected_object.pose
         )
-
 
         self.manual_pose_x.set(float(x))  # set first spinbox values to current pose
         self.manual_pose_y.set(float(y))
@@ -197,15 +205,15 @@ class ViewPoseRegistration(Observer, ttk.Frame):
                 )
             preview.set_image(img)
 
-    def _on_reset(self):
+    def _on_reset_pose(self):
         monitor_pose = self.scene.background.pose
         self.scene.selected_object.pose = monitor_pose  # add this as inital position
         self._update_gui_from_object_pose()
         self._preview_buffer()
 
-
-# good guess:
-# x :  0.42
-# y:  -0.58
-# z   -0.11
-# euler: [90, 0, 180]
+    def _on_reset(self):
+        self.registrator.reset()
+        self._update_gui_from_object_pose()
+        self._preview_buffer()
+        for prev in self.previews:
+            prev.clear_image()

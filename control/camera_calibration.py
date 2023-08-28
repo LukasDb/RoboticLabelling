@@ -194,8 +194,8 @@ class CameraCalibrator:
         ]
         ret = self._optimize_handeye_matrix(camera_poses, allRobotPoses)
         logging.info("Done")
-        logging.info("Optimality: ", ret["optimality"])
-        logging.info("Cost:       ", ret["cost"])
+        logging.info(f"Optimality: {ret['optimality']}")
+        logging.info(f"Cost:       {ret['cost']}")
 
         x = ret["x"]
         extrinsic_matrix = invert_homogeneous(get_affine_matrix_from_6d_vector("xyz", x[:6]))

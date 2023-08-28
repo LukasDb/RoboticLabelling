@@ -28,6 +28,8 @@ class DemoCam(Camera):
 
         self.window = tk.Toplevel()
         self.window.title("Demo Camera Controls")
+        self.window.attributes("-topmost", True)
+        self.window.attributes("-type", "dialog")
 
         # selectbox
         self.selectbox = ttk.Combobox(self.window, values=list(Path("demo_data").iterdir()))
@@ -54,19 +56,21 @@ class DemoCam(Camera):
         self.slider.grid(row=2, column=0, sticky=tk.NSEW)
 
     def _on_slider_change(self, value):
-        self.img_index = int(value)
+        with self.lock:
+            self.img_index = int(value)
 
     def _toggle_auto_play(self):
-        self.auto_play = not self.auto_play
+        with self.lock:
+            self.auto_play = not self.auto_play
 
     def _on_data_selected(self):
         # updatet indices for slider
-        self.mock_cam = self.selectbox.get()
-
-        img_path = Path(f"{self.mock_cam}/images").glob("*.png")
-        self.n_images = len(list(img_path))
-        self.slider.configure(to=self.n_images - 1)
-        self.slider.set(0)
+        with self.lock:
+            self.mock_cam = self.selectbox.get()
+            img_path = Path(f"{self.mock_cam}/images").glob("*.png")
+            self.n_images = len(list(img_path))
+            self.slider.configure(to=self.n_images - 1)
+            self.slider.set(0)
 
     def get_frame(self) -> CamFrame:
         with self.lock:

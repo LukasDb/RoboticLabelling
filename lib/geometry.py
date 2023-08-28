@@ -19,6 +19,15 @@ def get_affine_matrix_from_6d_vector(seq, vector):
     return homogeneous_mat_from_RT(rotation, vector[:3])
 
 
+def get_6d_vector_from_affine_matrix(seq, affine):
+    if seq == "Rodriguez":
+        rot, _ = cv2.Rodrigues(affine[:3, :3])
+        return np.concatenate([affine[:3, 3], rot])
+
+    rotation = R.from_matrix(affine[:3, :3])
+    return np.concatenate([affine[:3, 3], rotation.as_euler(seq)])
+
+
 def get_affine_matrix_from_r_t(r, t):  # input r: modified rodrigues parameters, t: position
     A = np.eye(4)
     A[:3, :3] = R.as_matrix(R.from_mrp(r))
