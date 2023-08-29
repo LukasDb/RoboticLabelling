@@ -30,16 +30,15 @@ class Datapoint:
 
 class PoseRegistrator:
     # handles the initial object pose registration
-    def __init__(self, scene: Scene):
+    def __init__(self, scene: Scene) -> None:
         super().__init__()
-        # TODO set initial pose to the center of the charuco board
         # TODO set background monitor so some 'easy' background
         # TODO set lighting to standard lighting
         self._scene = scene
 
         self.datapoints: List[Datapoint] = []
 
-    def reset(self):
+    def reset(self) -> None:
         self.datapoints.clear()
 
     def capture_image(self) -> Datapoint | None:
@@ -58,7 +57,7 @@ class PoseRegistrator:
         self.datapoints.append(datapoint)
         return datapoint
 
-    def optimize_pose(self):
+    def optimize_pose(self) -> None:
         obj = self._scene.selected_object
         obj.mesh.compute_vertex_normals()
         obj_points = obj.mesh.sample_points_poisson_disk(1000)
@@ -153,7 +152,7 @@ class PoseRegistrator:
 
         # rgb[projected_points[:, 0, 1], projected_points[:, 0, 0]] = obj.semantic_color
         for point in projected_points:
-            cv2.circle(rgb, tuple(point[0]), 4, obj.semantic_color, -1)
+            cv2.circle(rgb, tuple(point[0]), 4, obj.semantic_color.tolist(), -1)
         return rgb
 
     def _optimize_object_pose(self, world2object, world2camera, camera2object):

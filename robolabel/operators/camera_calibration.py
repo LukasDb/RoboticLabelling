@@ -34,20 +34,20 @@ class CameraCalibrator:
 
         self.mock_i = 0
 
-    def reset(self):
+    def reset(self) -> None:
         self.captured_images.clear()
         self.captured_robot_poses.clear()
         self.calibration_results.clear()
 
-    def load(self, cal_data: Dict):
+    def load(self, cal_data: Dict) -> None:
         """load calibration from config dict"""
-        self._scene.background.pose = cal_data["background_pose"]
+        self._scene.background.pose = np.array(cal_data["background_pose"])
 
         for c in self._scene.cameras.values():
             try:
-                intrinsic_matrix = cal_data[c.unique_id]["intrinsic"]
-                dist_coeffs = cal_data[c.unique_id]["dist_coeffs"]
-                extrinsic_matrix = cal_data[c.unique_id]["extrinsic"]
+                intrinsic_matrix = np.array(cal_data[c.unique_id]["intrinsic"])
+                dist_coeffs = np.array(cal_data[c.unique_id]["dist_coeffs"])
+                extrinsic_matrix = np.array(cal_data[c.unique_id]["extrinsic"])
                 parent = cal_data[c.unique_id]["attached_to"]
                 if parent != "none":
                     c.attach(self._scene.robots[parent], extrinsic_matrix)
@@ -59,18 +59,18 @@ class CameraCalibrator:
         """dump calibration as config dict"""
         cal_data = {
             c.unique_id: {
-                "intrinsic": c.intrinsic_matrix,
-                "dist_coeffs": c.dist_coeffs,
-                "extrinsic": c._link_matrix,
+                "intrinsic": c.intrinsic_matrix.tolist(),
+                "dist_coeffs": c.dist_coeffs.tolist(),
+                "extrinsic": c._link_matrix.tolist(),
                 "attached_to": "none" if c.parent is None else c.parent.name,
             }
             for c in self._scene.cameras.values()
         }
 
-        cal_data.update({"background_pose": self._scene.background.pose})
+        cal_data.update({"background_pose": self._scene.background.pose.tolist()})
         return cal_data
 
-    def setup(self):
+    def setup(self) -> None:
         # TODO reset lighting
         self._scene.background.setup_window()
         self.setup_charuco_board()

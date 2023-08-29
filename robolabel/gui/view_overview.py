@@ -322,5 +322,5 @@ class Overview(Observer, tk.Frame):
 
     def _on_object_color_click(self, obj: LabelledObject):
         colors = askcolor(title="Object Semantic Color")
-        obj.semantic_color = colors[0]
+        obj.semantic_color = np.ndarray(colors[0])
         self._update_object_row(obj.name)

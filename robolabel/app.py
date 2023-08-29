@@ -1,7 +1,8 @@
 import tkinter as tk
 from tkinter import ttk
 import tkinter.filedialog as filedialog
-import pickle
+import numpy as np
+import json
 from pathlib import Path
 import logging
 import coloredlogs
@@ -88,20 +89,24 @@ class App:
             title="Select Configuration file",
             filetypes=(("configuration files", "*.config"), ("all files", "*.*")),
         )
-        with Path(file.name).open("rb") as f:
-            data = pickle.load(f)
+        with Path(file.name).open("r") as f:
+            data = json.load(f)
 
         self.calibrator.load(data["camera_calibration"])
 
         for obj_data in data["objects"]:
             obj = LabelledObject(
-                obj_data["name"], obj_data["mesh_path"], obj_data["semantic_color"]
+                obj_data["name"],
+                Path(obj_data["mesh_path"]),
+                np.array(obj_data["semantic_color"]).astype(np.uint8),
             )
+
             if obj_data["registered"]:
-                obj.register_pose(obj_data["pose"])
+                obj.register_pose(np.array(obj_data["pose"]))
+
             self.scene.add_object(obj)
 
-    def _on_save_config(self):
+    def _on_save_config(self) -> None:
         default_name = "scene"
 
         file = filedialog.asksaveasfile(
@@ -115,19 +120,19 @@ class App:
             "objects": [
                 {
                     "name": name,
-                    "mesh_path": obj.mesh_path,
-                    "pose": obj.pose,
+                    "mesh_path": str(obj.mesh_path),
+                    "pose": obj.pose.tolist(),
                     "registered": obj.registered,
-                    "semantic_color": obj.semantic_color,
+                    "semantic_color": obj.semantic_color.tolist(),
                 }
                 for name, obj in self.scene.objects.items()
             ],
         }
 
-        with Path(file.name).open("wb") as f:
-            pickle.dump(data, f)
+        with Path(file.name).open("w") as f:
+            json.dump(data, f, indent=2)
 
-    def _on_add_object(self):
+    def _on_add_object(self) -> None:
         file = filedialog.askopenfile(
             title="Select Object Ply file",
             filetypes=(("ply files", "*.ply"), ("all files", "*.*")),
