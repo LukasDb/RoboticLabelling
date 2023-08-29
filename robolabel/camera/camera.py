@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod, abstractproperty
 
-from ..entity import Entity
+from ..entity import Entity, threadsafe
 from ..observer import Observable, Event
 from dataclasses import dataclass
 import numpy as np
@@ -43,16 +43,16 @@ class Camera(Entity, Observable, ABC):
         super().attach(parent, link_matrix)
         self.notify(Event.CAMERA_ATTACHED)
 
+    @threadsafe
     def set_calibration(
         self,
         intrinsic_matrix: np.ndarray,
         dist_coeffs: np.ndarray,
         extrinsic_matrix: np.ndarray,
     ):
-        with self.lock:
-            self._intrinsics = intrinsic_matrix
-            self._dist_coeffs = dist_coeffs
-            self._link_matrix = extrinsic_matrix
+        self._intrinsics = intrinsic_matrix
+        self._dist_coeffs = dist_coeffs
+        self._link_matrix = extrinsic_matrix
 
         self.notify(Event.CAMERA_CALIBRATED)
 

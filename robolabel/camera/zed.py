@@ -1,4 +1,4 @@
-from .camera import Camera, CamFrame
+from .camera import Camera, CamFrame, threadsafe
 import numpy as np
 from typing import List
 import cv2
@@ -50,14 +50,13 @@ class ZedCamera(Camera):
         self._rgb_buffer = sl.Mat()
         self._depth_buffer = sl.Mat()
 
+    @threadsafe
     def get_frame(self) -> CamFrame:
         output = CamFrame()
 
         if self.device.grab() == sl.ERROR_CODE.SUCCESS:
             self.device.retrieve_image(self._rgb_buffer, sl.VIEW.LEFT)
-            output.rgb = cv2.cvtColor(
-                self._rgb_buffer.get_data(deep_copy=True), cv2.COLOR_BGR2RGB
-            )
+            output.rgb = cv2.cvtColor(self._rgb_buffer.get_data(deep_copy=True), cv2.COLOR_BGR2RGB)
             self.device.retrieve_measure(self._depth_buffer, sl.MEASURE.DEPTH)
             output.depth = self._depth_buffer.get_data(deep_copy=True)
 

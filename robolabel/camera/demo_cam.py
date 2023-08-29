@@ -1,4 +1,4 @@
-from .camera import Camera, CamFrame
+from .camera import Camera, CamFrame, threadsafe
 import numpy as np
 import cv2
 from pathlib import Path
@@ -6,6 +6,7 @@ from itertools import cycle
 import time
 import tkinter as tk
 from tkinter import ttk
+from robolabel.lib.geometry import invert_homogeneous
 
 
 class DemoCam(Camera):
@@ -14,16 +15,11 @@ class DemoCam(Camera):
     def __init__(self, unique_id: str):
         super().__init__("MockCam")
         self._unique_id = unique_id
-        # self.mock_cam = "realsense_121622061798"
-        # self.mock_cam = "realsense_f1120593" #  old
-        # self.mock_cam = "0_Intel RealSense D415"
-        # self.mock_cam = "1_Intel RealSense D415"
         self.data_folder = None
         self.img_paths = None
         self.img_index = 0
         self.n_images = 0
         self.last_t = time.time()
-        # self.img_paths = cycle(Path(f"demo_data/images/{self.mock_cam}").glob("*.png"))
 
         self.window = tk.Toplevel()
         self.window.title("Demo Camera Controls")
@@ -54,29 +50,26 @@ class DemoCam(Camera):
         )
         self.slider.grid(row=2, column=0, sticky=tk.NSEW)
 
+    @threadsafe
     def _on_slider_change(self, value):
-        with self.lock:
-            self.img_index = int(value)
+        self.img_index = int(value)
 
+    @threadsafe
     def _toggle_auto_play(self):
-        with self.lock:
-            self.auto_play = not self.auto_play
+        self.auto_play = not self.auto_play
 
+    @threadsafe
     def _on_data_selected(self):
-        # updatet indices for slider
-        with self.lock:
-            self.data_folder = self.selectbox.get()
-            img_path = Path(f"{self.data_folder}/images").glob("*.png")
-            self.n_images = len(list(img_path))
-            self.slider.configure(to=self.n_images - 1)
-            self.slider.set(0)
+        # update indices for slider
+        self.selectbox.configure(values=list(Path("demo_data").iterdir()))
+        self.data_folder = self.selectbox.get()
+        img_path = Path(f"{self.data_folder}/images").glob("*.png")
+        self.n_images = len(list(img_path))
+        self.slider.configure(to=self.n_images - 1)
+        self.slider.set(0)
 
+    @threadsafe
     def get_frame(self) -> CamFrame:
-        with self.lock:
-            frame = self._get_frame()
-        return frame
-
-    def _get_frame(self) -> CamFrame:
         if self.data_folder is None:
             return CamFrame()
 
@@ -101,9 +94,9 @@ class DemoCam(Camera):
         pose_path = Path(f"{self.data_folder}/poses/{self.img_index}.txt")
         robot_pose = np.loadtxt(str(pose_path))
 
-        if "0_Intel RealSense D415" in self.data_folder and self._link_matrix is not None:
+        if "Intel RealSense D415_0" in self.data_folder and self._link_matrix is not None:
             # accidentally saved camera pose instead of robot pose
-            robot_pose = robot_pose @ np.linalg.inv(self._link_matrix)
+            robot_pose = robot_pose @ invert_homogeneous(self._link_matrix)
 
         # update mock robot pose
         if self.parent is not None:

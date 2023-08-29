@@ -1,4 +1,4 @@
-from .camera import Camera, CamFrame
+from .camera import Camera, CamFrame, threadsafe
 import numpy as np
 from typing import List
 import cv2
@@ -29,7 +29,7 @@ class Realsense(Camera):
 
         self._pipeline = rs.pipeline()
         self._config = config = rs.config()
-        #config.enable_device(self._serial_number)
+        # config.enable_device(self._serial_number)
 
         pipeline_wrapper = rs.pipeline_wrapper(self._pipeline)
         try:
@@ -42,12 +42,8 @@ class Realsense(Camera):
         self.device = pipeline_profile.get_device()
         super().__init__(self.device.get_info(rs.camera_info.name))
 
-        config.enable_stream(
-            rs.stream.depth, self.DEPTH_W, self.DEPTH_H, rs.format.z16, 30
-        )
-        config.enable_stream(
-            rs.stream.color, self.RGB_W, self.RGB_H, rs.format.bgr8, 30
-        )
+        config.enable_stream(rs.stream.depth, self.DEPTH_W, self.DEPTH_H, rs.format.z16, 30)
+        config.enable_stream(rs.stream.color, self.RGB_W, self.RGB_H, rs.format.bgr8, 30)
         self.align_to_rgb = rs.align(rs.stream.color)
 
         self.temporal_filter = rs.temporal_filter(
@@ -74,6 +70,7 @@ class Realsense(Camera):
             logging.error(f"Could not start camera stream ({self.name})")
             logging.error(e)
 
+    @threadsafe
     def get_frame(self) -> CamFrame:
         output = CamFrame()
         if not self.is_started:
@@ -92,12 +89,8 @@ class Realsense(Camera):
             depth_frame = self.temporal_filter.process(depth_frame)
             depth_frame = self.spatial_filter.process(depth_frame)
 
-        depth_image = (
-            np.asanyarray(depth_frame.get_data()).astype(np.float32) * self.depth_scale
-        )
-        color_image = cv2.cvtColor(
-            np.asanyarray(color_frame.get_data()), cv2.COLOR_BGR2RGB
-        )
+        depth_image = np.asanyarray(depth_frame.get_data()).astype(np.float32) * self.depth_scale
+        color_image = cv2.cvtColor(np.asanyarray(color_frame.get_data()), cv2.COLOR_BGR2RGB)
 
         output.depth = depth_image
         output.rgb = color_image
