@@ -214,11 +214,10 @@ class CameraCalibrator:
             t_target2cam,
             method=cv2.CALIB_HAND_EYE_TSAI,
         )
-        print(f"My solution:\n{extrinsic_matrix}")
+
         extrinsic_matrix = np.eye(4)
         extrinsic_matrix[:3, :3] = R_cam2gripper
         extrinsic_matrix[:3, 3] = np.reshape(t_cam2gripper, (3,))
-        print(f"OpenCV:\n{extrinsic_matrix}")
 
         self._scene.background.pose = world2markers @ self.markers2monitor
 

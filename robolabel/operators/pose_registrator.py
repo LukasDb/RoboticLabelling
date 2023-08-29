@@ -37,12 +37,10 @@ class PoseRegistrator:
         # TODO set lighting to standard lighting
         self._scene = scene
 
-        self.valid_campose_icp: List[np.ndarray] = []
         self.datapoints: List[Datapoint] = []
 
     def reset(self):
         self.datapoints.clear()
-        self.valid_campose_icp.clear()
 
     def capture_image(self) -> Datapoint | None:
         frame = self._scene.selected_camera.get_frame()
@@ -56,38 +54,16 @@ class PoseRegistrator:
             intrinsics=self._scene.selected_camera.intrinsic_matrix,
             dist_coeffs=self._scene.selected_camera.dist_coeffs,
         )
-        # save camera pose to file
-        # folder = "demo_data"
-        # index = len(self.datapoints)+10
-        # pose_path = (f"{folder}/poses/{self._scene.selected_camera}/{index}.txt")
-        # if not os.path.exists(os.path.dirname(pose_path)):
-        #     os.makedirs(os.path.dirname(pose_path))
-        # np.savetxt(pose_path, datapoint.pose)
-        # # save rgb image and depth to file
-        # rgb_path = (f"{folder}/rgb/{self._scene.selected_camera}/{index}.png")
-        # if not os.path.exists(os.path.dirname(rgb_path)):
-        #     os.makedirs(os.path.dirname(rgb_path))
-        # cv2.imwrite(rgb_path, cv2.cvtColor(datapoint.rgb, cv2.COLOR_RGB2BGR))
-        # if datapoint.depth is not None:
-        #     depth_path = (f"{folder}/depth/{self._scene.selected_camera}/{index}.npz")
-        #     if not os.path.exists(os.path.dirname(depth_path)):
-        #         os.makedirs(os.path.dirname(depth_path))
-        #     np.save(depth_path, datapoint.depth)
 
         self.datapoints.append(datapoint)
         return datapoint
 
     def optimize_pose(self):
-        # TODO optimize pose in each image using ICP
-        # TODO optimize object pose over all images
-        # TODO inform user about optimization result
-        # TODO save optimized pose to the scene
-
         obj = self._scene.selected_object
         obj.mesh.compute_vertex_normals()
         obj_points = obj.mesh.sample_points_poisson_disk(1000)
 
-        # TODO add tqdm progress bar when done debugging
+        valid_campose_icp = []
         for datapoint in tqdm(self.datapoints, desc="ICP"):
             # initial_guess = np.linalg.inv(obj.pose) @ datapoint.pose
             initial_guess = np.linalg.inv(datapoint.pose) @ obj.pose
@@ -110,11 +86,6 @@ class PoseRegistrator:
             )
             target_pcl.orient_normals_towards_camera_location()
 
-            # origin = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)
-            # guess = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.2)
-            # guess.transform(initial_guess)
-            # o3d.visualization.draw_geometries([target_pcl, obj_points, origin, guess])
-
             result = o3d.pipelines.registration.registration_icp(
                 obj_points,
                 target_pcl,
@@ -127,19 +98,18 @@ class PoseRegistrator:
                 continue
 
             icp_RT = result.transformation  # ICP is in camera frame
-            self.valid_campose_icp.append((datapoint.pose, icp_RT))
+            valid_campose_icp.append((datapoint.pose, icp_RT))
 
-        valid_frac = len(self.valid_campose_icp) / len(self.datapoints)
-        
+        valid_frac = len(valid_campose_icp) / len(self.datapoints)
 
         logging.info(
-            f"Using {len(self.valid_campose_icp)}/{len(self.datapoints)} ({valid_frac*100:.1f}%) datapoints for optimization."
+            f"Using {len(valid_campose_icp)}/{len(self.datapoints)} ({valid_frac*100:.1f}%) datapoints for optimization."
         )
 
         ret = self._optimize_object_pose(
             obj.pose,
-            [x[0] for x in self.valid_campose_icp],
-            [x[1] for x in self.valid_campose_icp],
+            [x[0] for x in valid_campose_icp],
+            [x[1] for x in valid_campose_icp],
         )
 
         logging.info("Done")

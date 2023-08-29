@@ -1,4 +1,4 @@
-from robolabel.gui.app import App
+from robolabel.app import App
 
 if __name__ == "__main__":
     app = App()

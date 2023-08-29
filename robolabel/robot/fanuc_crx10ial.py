@@ -1,4 +1,4 @@
-from .robot import Robot
+from .robot import Robot, threadsafe
 import numpy as np
 import requests
 import json
@@ -16,6 +16,7 @@ class FanucCRX10iAL(Robot):
         raise NotImplementedError("Implement move to for fanuc")
 
     @property
+    @threadsafe
     def pose(self) -> np.ndarray:
         robot_http = "http://" + self.ROBOT_IP + "/KAREL/"
         url = robot_http + "remoteposition"
@@ -27,7 +28,7 @@ class FanucCRX10iAL(Robot):
         jdict = json.loads(req.text)
         pose, _ = self.__parse_remote_position(jdict)
         self._pose = pose
-        return super().pose
+        return self._pose
 
     @pose.setter
     def pose(self, pose: np.ndarray):

@@ -3,6 +3,14 @@ from scipy.spatial.transform import Rotation as R
 from threading import Lock
 
 
+def threadsafe(func):
+    def wrapper(self: "Entity", *args, **kwargs):
+        with self.lock:
+            return func(self, *args, **kwargs)
+
+    return wrapper
+
+
 class Entity:
     """An entity is an object in the world that has a position and orientation"""
 
@@ -26,28 +34,29 @@ class Entity:
         return R.from_matrix(self.pose[:3, :3])
 
     @property
+    @threadsafe
     def pose(self) -> np.ndarray:
-        with self.lock:
-            if self.parent is None:
-                pose = self._pose
-            else:
-                pose = self.parent.pose @ self._link_matrix
-            return pose
+        if self.parent is None:
+            pose = self._pose
+        else:
+            pose = self.parent.pose @ self._link_matrix
+        return pose
 
     @pose.setter
+    @threadsafe
     def pose(self, pose: np.ndarray):
         self._pose = pose
 
+    @threadsafe
     def attach(self, parent: "Entity", link_matrix: np.ndarray):
-        with self.lock:
-            self.parent = parent
-            self._link_matrix = link_matrix
-            self._pose = self.parent.pose @ self._link_matrix
+        self.parent = parent
+        self._link_matrix = link_matrix
+        self._pose = self.parent.pose @ self._link_matrix
 
+    @threadsafe
     def detach(self):
-        with self.lock:
-            self.parent = None
-            self._link_matrix = None
+        self.parent = None
+        self._link_matrix = None
 
     def __str__(self) -> str:
         return f"{self.name}"

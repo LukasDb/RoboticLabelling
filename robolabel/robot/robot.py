@@ -1,4 +1,4 @@
-from ..entity import Entity
+from ..entity import Entity, threadsafe
 import numpy as np
 from abc import ABC, abstractmethod
 
