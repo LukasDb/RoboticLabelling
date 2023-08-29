@@ -1,8 +1,5 @@
 import tkinter as tk
 from tkinter import ttk
-from scipy.spatial.transform import Rotation as R
-import itertools as it
-from typing import List
 from robolabel.lib.geometry import get_euler_from_affine_matrix
 
 from robolabel.scene import Scene

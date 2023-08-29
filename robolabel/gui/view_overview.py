@@ -2,7 +2,9 @@ import tkinter as tk
 from tkinter import ttk
 from tkinter.colorchooser import askcolor
 import threading
+from pathlib import Path
 from typing import Dict
+import logging
 import numpy as np
 import time
 import cv2
@@ -13,7 +15,6 @@ from robolabel.labelled_object import LabelledObject
 from robolabel.observer import Observer, Event
 from .resizable_image import ResizableImage
 from robolabel.operators import CameraCalibrator, PoseRegistrator
-
 
 
 class Overview(Observer, tk.Frame):
@@ -95,10 +96,17 @@ class Overview(Observer, tk.Frame):
         camera_selection_label.grid(row=0, column=0, padx=5, sticky=tk.NW)
         self.camera_selection.grid(row=0, column=1, sticky=tk.NW)
 
+        capture_frame = tk.Frame(control_frame)
+        capture_button = ttk.Button(capture_frame, text="Capture Image", command=self._on_capture)
+        self.capture_name = ttk.Entry(capture_frame)
+        self.capture_name.grid(row=0, column=0)
+        capture_button.grid(row=0, column=1)
+
         self.cam_overview = self.setup_camera_table(control_frame)
         self.object_overview = self.setup_object_table(control_frame)
 
         cam_select_frame.grid(sticky=tk.NSEW, pady=10)
+        capture_frame.grid(sticky=tk.NSEW, pady=10)
         self.cam_overview.grid(sticky=tk.NSEW, pady=10)
         self.object_overview.grid(sticky=tk.NSEW, pady=10)
         return control_frame
@@ -133,6 +141,32 @@ class Overview(Observer, tk.Frame):
             self._add_camera_row(c)
 
         return self.cam_overview
+
+    def _on_capture(self):
+        # save image for use in demo cam + robot pose
+        data_name = self.capture_name.get()
+        if data_name == "":
+            logging.warn("Please enter a name for the data")
+            return
+        data_folder = Path(f"demo_data/{data_name}")
+
+        if not data_folder.exists():
+            data_folder.mkdir(parents=True, exist_ok=True)
+            (data_folder / "images").mkdir(parents=True, exist_ok=True)
+            (data_folder / "depth").mkdir(parents=True, exist_ok=True)
+            (data_folder / "poses").mkdir(parents=True, exist_ok=True)
+
+        cam = self._scene.selected_camera
+        idx = len(list(data_folder.glob("images/*.png")))
+
+        frame = cam.get_frame()
+        if cam.parent is not None:
+            robot_pose = cam.parent.pose
+            np.savetxt(str(data_folder / f"poses/{idx}.txt"), robot_pose)
+        if frame.rgb is not None:
+            cv2.imwrite(str(data_folder / f"images/{idx}.png"), frame.rgb)
+        if frame.depth is not None:
+            np.save(str(data_folder / f"depth/{idx}.npy"), frame.depth)
 
     def _add_camera_row(self, c):
         # add camera name

@@ -1,26 +1,18 @@
 import tkinter as tk
 from tkinter import ttk
 import tkinter.filedialog as filedialog
-import numpy as np
 import pickle
 from pathlib import Path
+import logging
+import coloredlogs
 
 from robolabel.scene import Scene
 from robolabel.robot import MockRobot, FanucCRX10iAL
 from robolabel.camera import DemoCam, Realsense, ZedCamera
-
 from robolabel.labelled_object import LabelledObject
-
 from robolabel.operators import CameraCalibrator, PoseRegistrator
+from robolabel.gui import Overview, ViewAcquisition, ViewPoseRegistration, ViewCalibration
 
-from robolabel.observer import Observer, Event
-from .view_overview import Overview
-from .view_calibration import ViewCalibration
-from .view_pose_registration import ViewPoseRegistration
-from .view_acquisition import ViewAcquisition
-
-import logging
-import coloredlogs
 
 coloredlogs.install()
 logging.basicConfig(level=logging.DEBUG)
@@ -58,9 +50,7 @@ class App:
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
         self.root.rowconfigure(1, weight=1)
-        self.overview = Overview(
-            self.root, self.scene, self.calibrator, self.pose_registrator
-        )
+        self.overview = Overview(self.root, self.scene, self.calibrator, self.pose_registrator)
         tabs = ttk.Notebook(self.root)
         self.overview.grid(sticky=tk.NSEW, pady=10)
         tabs.grid(sticky=tk.NSEW, pady=10)
@@ -79,7 +69,6 @@ class App:
         mock_robot = MockRobot()
         self.scene.add_robot(mock_robot)
         self.scene.add_camera(DemoCam("Demo Cam"))
-        
 
         crx = FanucCRX10iAL()
         self.scene.add_robot(crx)
@@ -88,8 +77,8 @@ class App:
         for cam in Realsense.get_available_devices():
             self.scene.add_camera(cam)
 
-        #for cam in ZedCamera.get_available_devices():
-        #    self.scene.add_camera(cam)
+        for cam in ZedCamera.get_available_devices():
+            self.scene.add_camera(cam)
 
     def run(self):
         tk.mainloop()
