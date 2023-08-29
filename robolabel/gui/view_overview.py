@@ -7,13 +7,13 @@ import numpy as np
 import time
 import cv2
 
-from model.scene import Scene
-from model.camera.camera import Camera
-from model.labelled_object import LabelledObject
-from model.observer import Observer, Event
-from view.resizable_image import ResizableImage
-from control.camera_calibration import CameraCalibrator
-from control.pose_registrator import PoseRegistrator
+from robolabel.scene import Scene
+
+from robolabel.labelled_object import LabelledObject
+from robolabel.observer import Observer, Event
+from .resizable_image import ResizableImage
+from robolabel.operators import CameraCalibrator, PoseRegistrator
+
 
 
 class Overview(Observer, tk.Frame):

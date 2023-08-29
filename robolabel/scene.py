@@ -1,10 +1,10 @@
 from typing import List, Dict
 
-from model.observer import Observable, Event
-from model.labelled_object import LabelledObject
-from model.robot import Robot
-from model.camera.camera import Camera
-from model.background_monitor import BackgroundMonitor
+from .observer import Observable, Event
+from .labelled_object import LabelledObject
+from .robot.robot import Robot
+from .camera.camera import Camera
+from .background_monitor import BackgroundMonitor
 
 
 class Scene(Observable):

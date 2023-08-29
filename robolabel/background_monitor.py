@@ -1,11 +1,10 @@
 import numpy as np
 import tkinter as tk
-from tkinter import ttk
 from .entity import Entity
 from PIL import Image, ImageTk
 import cv2
 import logging
-from lib.geometry import *
+from robolabel.lib.geometry import *
 
 
 class BackgroundMonitor(Entity):
@@ -107,14 +106,3 @@ class BackgroundMonitor(Entity):
             3,  # negative == filled
             lineType=cv2.LINE_AA,
         )
-
-        # rvec, tvec = get_rvec_tvec_from_affine_matrix(cam2monitor)
-        # extrinsic==world2cam
-        # cv2.drawFrameAxes(
-        #     rgb,
-        #     intrinsic,
-        #     dist_coeffs,
-        #     rvec,
-        #     tvec,
-        #     0.2,
-        # )

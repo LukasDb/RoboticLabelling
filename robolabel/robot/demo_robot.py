@@ -1,5 +1,5 @@
 import numpy as np
-from model.robot import Robot
+from robolabel.robot.robot import Robot
 
 
 class MockRobot(Robot):

@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
-from model.scene import Scene
+from robolabel.scene import Scene
 
 
 class ViewAcquisition(tk.Frame):

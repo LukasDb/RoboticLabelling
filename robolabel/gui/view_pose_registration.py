@@ -3,12 +3,12 @@ from tkinter import ttk
 from scipy.spatial.transform import Rotation as R
 import itertools as it
 from typing import List
-from lib.geometry import get_rvec_tvec_from_affine_matrix, get_euler_from_affine_matrix
+from robolabel.lib.geometry import get_euler_from_affine_matrix
 
-from model.scene import Scene
-from model.observer import Event, Observable, Observer
-from view.resizable_image import ResizableImage
-from control.pose_registrator import PoseRegistrator, Datapoint
+from robolabel.scene import Scene
+from robolabel.observer import Event, Observable, Observer
+from .resizable_image import ResizableImage
+from robolabel.operators import PoseRegistrator
 
 
 class ViewPoseRegistration(Observer, ttk.Frame):
@@ -40,7 +40,7 @@ class ViewPoseRegistration(Observer, ttk.Frame):
             self._update_gui_from_object_pose()
             self._preview_buffer()
 
-    def setup_controls(self, parent):
+    def setup_controls(self, parent) -> ttk.Frame:
         control_frame = ttk.Frame(parent)
 
         self.object_selection = ttk.Combobox(
@@ -73,7 +73,7 @@ class ViewPoseRegistration(Observer, ttk.Frame):
         self.position_label = ttk.Label(control_frame, text="Position:")
         self.orientation_label = ttk.Label(control_frame, text="Orientation:")
 
-        def sb_pos():
+        def sb_pos() -> ttk.Spinbox:
             spinbox = ttk.Spinbox(
                 control_frame,
                 from_=-1.0,
@@ -85,7 +85,7 @@ class ViewPoseRegistration(Observer, ttk.Frame):
             spinbox.bind("<Return>", lambda _: self._change_initial_guess())
             return spinbox
 
-        def sb_rot():
+        def sb_rot() -> ttk.Spinbox:
             # seperat spinbox for rotation
             spinbox = ttk.Spinbox(
                 control_frame,

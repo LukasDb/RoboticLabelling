@@ -4,9 +4,8 @@ from pathlib import Path
 import streamlit as st
 import cv2
 from typing import List, Dict
-from model.scene import Scene
-from model.camera.camera import Camera
-from lib.geometry import *
+from robolabel.scene import Scene
+from robolabel.lib.geometry import invert_homogeneous, get_affine_matrix_from_6d_vector
 import cv2
 from tqdm import tqdm
 from cv2 import aruco

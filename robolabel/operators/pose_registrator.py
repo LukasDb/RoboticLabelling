@@ -9,13 +9,11 @@ from dataclasses import dataclass
 from scipy import optimize
 import logging
 
-from model.scene import Scene
-from model.labelled_object import LabelledObject
-from lib.geometry import (
+from robolabel.scene import Scene
+from robolabel.labelled_object import LabelledObject
+from robolabel.lib.geometry import (
     invert_homogeneous,
     get_affine_matrix_from_euler,
-    get_affine_matrix_from_6d_vector,
-    get_6d_vector_from_affine_matrix,
 )
 
 import time

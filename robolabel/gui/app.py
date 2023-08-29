@@ -5,17 +5,15 @@ import numpy as np
 import pickle
 from pathlib import Path
 
-from model.scene import Scene
-from model.fanuc_crx10ial import FanucCRX10iAL
-from model.demo_robot import MockRobot
-from model.camera.realsense import Realsense
-#from model.camera.zed import ZedCamera
-from model.camera.demo_cam import DemoCam
-from model.labelled_object import LabelledObject
+from robolabel.scene import Scene
+from robolabel.robot import MockRobot, FanucCRX10iAL
+from robolabel.camera import DemoCam, Realsense, ZedCamera
 
-from control.camera_calibration import CameraCalibrator
-from control.pose_registrator import PoseRegistrator
+from robolabel.labelled_object import LabelledObject
 
+from robolabel.operators import CameraCalibrator, PoseRegistrator
+
+from robolabel.observer import Observer, Event
 from .view_overview import Overview
 from .view_calibration import ViewCalibration
 from .view_pose_registration import ViewPoseRegistration

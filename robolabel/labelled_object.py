@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 
 from .entity import Entity
-from model.observer import Observable, Event
+from .observer import Observable, Event
 
 
 class LabelledObject(Observable, Entity):

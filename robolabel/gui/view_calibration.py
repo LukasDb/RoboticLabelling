@@ -5,10 +5,9 @@ import numpy as np
 import cv2
 import time
 
-from model.scene import Scene
-from model.observer import Observer, Event
-from control.camera_calibration import CameraCalibrator
-from view.resizable_image import ResizableImage
+from robolabel.scene import Scene
+from robolabel.operators import CameraCalibrator
+from .resizable_image import ResizableImage
 
 
 class ViewCalibration(ttk.Frame):

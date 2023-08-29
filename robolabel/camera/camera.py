@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod, abstractproperty
 
-from model.entity import Entity
 from ..entity import Entity
 from ..observer import Observable, Event
 from dataclasses import dataclass

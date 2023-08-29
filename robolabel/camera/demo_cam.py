@@ -1,4 +1,3 @@
-from model.camera.camera import CamFrame
 from .camera import Camera, CamFrame
 import numpy as np
 import cv2
