@@ -53,19 +53,22 @@ class CameraCalibrator:
                     c.attach(self._scene.robots[parent], extrinsic_matrix)
                 c.set_calibration(intrinsic_matrix, dist_coeffs, extrinsic_matrix)
             except KeyError:
-                logging.info("No calibration data for camera", c.unique_id)
+                pass
+                # logging.info("No calibration data for camera", c.unique_id)
 
     def dump(self) -> Dict:
         """dump calibration as config dict"""
-        cal_data = {
-            c.unique_id: {
+        cal_data = {}
+        for c in self._scene.cameras.values():
+            if c.intrinsic_matrix is None:
+                continue
+
+            cal_data[c.unique_id] = {
                 "intrinsic": c.intrinsic_matrix.tolist(),
                 "dist_coeffs": c.dist_coeffs.tolist(),
                 "extrinsic": c._link_matrix.tolist(),
                 "attached_to": "none" if c.parent is None else c.parent.name,
             }
-            for c in self._scene.cameras.values()
-        }
 
         cal_data.update({"background_pose": self._scene.background.pose.tolist()})
         return cal_data

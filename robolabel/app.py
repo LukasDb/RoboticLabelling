@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from robolabel.scene import Scene
+from robolabel.observer import Event, Observable, Observer
 from robolabel.robot import MockRobot, FanucCRX10iAL
 from robolabel.camera import DemoCam, Realsense, ZedCamera
 from robolabel.labelled_object import LabelledObject
@@ -22,6 +23,7 @@ class App:
     def __init__(self) -> None:
         self.root = tk.Tk()
         self.root.title("Robotic Labelling")
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.scene = Scene()
         # --- load controllers ---
         self.calibrator = CameraCalibrator(self.scene)
@@ -75,19 +77,23 @@ class App:
         for cam in ZedCamera.get_available_devices():
             self.scene.add_camera(cam)
 
+        state_path = Path("app_state.json")
+        if state_path.exists():
+            with state_path.open("r") as f:
+                data = json.load(f)
+            self.load_state(data)
+
+    def _on_close(self):
+        print("Closing app...")
+        state_path = Path("app_state.json")
+        self.save_state(state_path)
+        self.root.destroy()
+
     def run(self):
         tk.mainloop()
 
-    def _on_load_config(self):
-        file = filedialog.askopenfile(
-            title="Select Configuration file",
-            filetypes=(("configuration files", "*.config"), ("all files", "*.*")),
-        )
-        with Path(file.name).open("r") as f:
-            data = json.load(f)
-
+    def load_state(self, data):
         self.calibrator.load(data["camera_calibration"])
-
         for obj_data in data["objects"]:
             obj = LabelledObject(
                 obj_data["name"],
@@ -100,15 +106,7 @@ class App:
 
             self.scene.add_object(obj)
 
-    def _on_save_config(self) -> None:
-        default_name = "scene"
-
-        file = filedialog.asksaveasfile(
-            title="Save Configuration file",
-            filetypes=(("configuration files", "*.config"), ("all files", "*.*")),
-            defaultextension=".config",
-            initialfile=default_name,
-        )
+    def save_state(self, file: Path):
         data = {
             "camera_calibration": self.calibrator.dump(),
             "objects": [
@@ -125,6 +123,26 @@ class App:
 
         with Path(file.name).open("w") as f:
             json.dump(data, f, indent=2)
+
+    def _on_load_config(self):
+        file = filedialog.askopenfile(
+            title="Select Configuration file",
+            filetypes=(("configuration files", "*.config"), ("all files", "*.*")),
+        )
+        with Path(file.name).open("r") as f:
+            data = json.load(f)
+        self.load_state(data)
+
+    def _on_save_config(self) -> None:
+        default_name = "scene"
+
+        file = filedialog.asksaveasfile(
+            title="Save Configuration file",
+            filetypes=(("configuration files", "*.config"), ("all files", "*.*")),
+            defaultextension=".config",
+            initialfile=default_name,
+        )
+        self.save_state(file)
 
     def _on_add_object(self) -> None:
         file = filedialog.askopenfile(
