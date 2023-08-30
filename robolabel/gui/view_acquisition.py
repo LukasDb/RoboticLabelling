@@ -2,8 +2,9 @@ import tkinter as tk
 from tkinter import ttk
 from robolabel.scene import Scene
 from .widget_list import WidgetList
+from .settings_widget import SettingsWidget
 from robolabel.observer import Observable, Observer, Event
-from robolabel.operators import TrajectoryGenerator, DatasetWriter, Acquisition
+from robolabel.operators import TrajectoryGenerator, TrajectorySettings, DatasetWriter, Acquisition
 
 
 """
@@ -37,11 +38,14 @@ class ViewAcquisition(tk.Frame, Observer):
         self.cam_list = WidgetList(self, column_names=["Cameras"], columns=[tk.Checkbutton])
         self.object_list = WidgetList(self, column_names=["Objects"], columns=[tk.Checkbutton])
         self.controls = ttk.Frame(self)
+        self.traj_settings = SettingsWidget(self, dataclass=TrajectorySettings)
+        self.traj_settings.set_from_instance(TrajectorySettings())
 
         padx = 10
         self.cam_list.grid(column=0, row=1, sticky=tk.NSEW, padx=padx)
         self.object_list.grid(column=1, row=1, sticky=tk.NSEW, padx=padx)
         self.controls.grid(column=2, row=1, sticky=tk.NSEW, padx=padx)
+        self.traj_settings.grid(column=3, row=1, sticky=tk.NSEW, padx=padx)
 
         self.object_states = {}
         self.camera_states = {}
@@ -68,6 +72,11 @@ class ViewAcquisition(tk.Frame, Observer):
             text="1. Generate Trajectory",
             command=self._generate_trajectory,
         )
+        self.dry_run_button = ttk.Button(
+            self.controls,
+            text="1.2 Perform Dry Run",
+            command=self._dry_run,
+        )
 
         self.pre_label = ttk.Label(
             self.controls,
@@ -92,19 +101,28 @@ class ViewAcquisition(tk.Frame, Observer):
         )
 
         pady = 5
-        self.use_backgrounds_checkbox.grid(column=0, row=0, sticky=tk.W, pady=2)
-        self.use_lighting_checkbox.grid(column=0, row=1, sticky=tk.W, pady=pady)
-        self.generate_trajectory_button.grid(column=0, row=2, sticky=tk.W, pady=pady)
-        self.pre_label.grid(column=0, row=3, sticky=tk.W, pady=pady)
-        self.start_pre_acquisition.grid(column=0, row=4, sticky=tk.W, pady=pady)
-        self.after_pre_label.grid(column=0, row=5, sticky=tk.W, pady=pady)
-        self.start_acquisition.grid(column=0, row=6, sticky=tk.W, pady=pady)
+        self.use_backgrounds_checkbox.grid(column=0, sticky=tk.W, pady=2)
+        self.use_lighting_checkbox.grid(column=0, sticky=tk.W, pady=pady)
+        self.generate_trajectory_button.grid(column=0, sticky=tk.W, pady=pady)
+        self.dry_run_button.grid(column=0, sticky=tk.W, pady=pady)
+        self.pre_label.grid(column=0, sticky=tk.W, pady=pady)
+        self.start_pre_acquisition.grid(column=0, sticky=tk.W, pady=pady)
+        self.after_pre_label.grid(column=0, sticky=tk.W, pady=pady)
+        self.start_acquisition.grid(column=0, sticky=tk.W, pady=pady)
 
     def _generate_trajectory(self):
-        print("Generating trajectory...")
         self.traj_gen.generate_trajectory(
-            [o for o in self.scene.objects.values() if self.object_states[o.name].get()]
+            [o for o in self.scene.objects.values() if self.object_states[o.name].get()],
+            self.traj_settings.get_instance(),
         )
+
+    def _dry_run(self):
+        print("Performing dry run...")
+        print(self.traj_settings.get_instance())
+        traj = self.traj_gen.get_current_trajectory()
+        if traj is None:
+            print("No trajectory generated yet")
+            return
 
     def _start_acquisition(self):
         print(
