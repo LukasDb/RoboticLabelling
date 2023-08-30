@@ -135,6 +135,10 @@ class PoseRegistrator:
         if cam_intrinsics is None:
             return rgb
 
+        cam2obj = invert_homogeneous(cam_pose) @ obj.pose
+        rvec, _ = cv2.Rodrigues(cam2obj[:3, :3])
+        tvec = cam2obj[:3, 3]
+
         if obj.name not in self.mesh_cache:
             points = np.asarray(obj.mesh.vertices)
             points = np.asarray(obj.mesh.sample_points_poisson_disk(500).points)
@@ -142,21 +146,61 @@ class PoseRegistrator:
         else:
             points = self.mesh_cache[obj.name]
 
-        cam2obj = invert_homogeneous(cam_pose) @ obj.pose
-        rvec, _ = cv2.Rodrigues(cam2obj[:3, :3])
-        tvec = cam2obj[:3, 3]
-
         projected_points, _ = cv2.projectPoints(
             points, rvec, tvec, cam_intrinsics, cam_dist_coeffs
         )
-        projected_points = projected_points.astype(int)
+        projected_points = projected_points.astype(int)[:, 0, :]
+
+        outside_x = np.logical_or(
+            projected_points[:, 0] < 0, projected_points[:, 0] >= rgb.shape[1]
+        )
+        outside_y = np.logical_or(
+            projected_points[:, 1] < 0, projected_points[:, 1] >= rgb.shape[0]
+        )
+        outside = np.logical_or(outside_x, outside_y)
+
+        if np.count_nonzero(outside) / len(outside) > 0.8:  # 80% outside
+            self._draw_tracking_arrow(
+                rgb, rvec, tvec, cam_intrinsics, cam_dist_coeffs, obj.semantic_color
+            )
 
         # clip to image size
         projected_points = np.clip(projected_points, 0, np.array(rgb.shape[1::-1]) - 1)
 
         for point in projected_points:
-            cv2.circle(rgb, tuple(point[0]), 4, obj.semantic_color, -1)
+            cv2.circle(rgb, tuple(point), 4, obj.semantic_color, -1)
         return rgb
+
+    def _draw_tracking_arrow(self, rgb, rvec, tvec, cam_intrinsics, cam_dist_coeffs, color):
+        centroid = np.array([0.0, 0.0, 0.0])
+        projected_center = cv2.projectPoints(
+            centroid, rvec, tvec, cam_intrinsics, cam_dist_coeffs
+        )[0][0][0]
+        # dist to image border
+        half_size = np.array((rgb.shape[1], rgb.shape[0])) / 2
+        centroid_centered = projected_center - half_size
+        outside_dist = np.clip(np.abs(centroid_centered) - half_size, 0, None)
+        outside_dist = np.linalg.norm(outside_dist)  # used for thickness of arrow
+
+        arrow_thickness = np.clip(int(5000 / outside_dist), 2, 10)
+
+        dir_vec = centroid_centered / np.linalg.norm(centroid_centered)
+
+        # find the point on the image border
+        dist = np.linalg.norm(centroid_centered)
+        scale = min(np.abs(half_size / centroid_centered))
+        length_2_img_border = dist * scale
+
+        arrow_length = 200
+        arrow_start = (
+            int(rgb.shape[1] / 2 + dir_vec[0] * (length_2_img_border - arrow_length)),
+            int(rgb.shape[0] / 2 + dir_vec[1] * (length_2_img_border - arrow_length)),
+        )
+        arrow_end = (
+            int(rgb.shape[1] / 2 + dir_vec[0] * length_2_img_border),
+            int(rgb.shape[0] / 2 + dir_vec[1] * length_2_img_border),
+        )
+        cv2.arrowedLine(rgb, arrow_start, arrow_end, color, arrow_thickness)
 
     def _optimize_object_pose(self, world2object, world2camera, camera2object):
         def residual(world2object_, world2camera, camera2object):
