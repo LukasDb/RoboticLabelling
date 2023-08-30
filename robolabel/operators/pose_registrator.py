@@ -35,7 +35,7 @@ class PoseRegistrator:
         # TODO set background monitor so some 'easy' background
         # TODO set lighting to standard lighting
         self._scene = scene
-
+        self.mesh_cache = {}
         self.datapoints: List[Datapoint] = []
 
     def reset(self) -> None:
@@ -135,8 +135,13 @@ class PoseRegistrator:
         if cam_intrinsics is None:
             return rgb
 
-        points = np.asarray(obj.mesh.vertices)
-        points = np.asarray(obj.mesh.sample_points_poisson_disk(500).points)
+        if obj.name not in self.mesh_cache:
+            points = np.asarray(obj.mesh.vertices)
+            points = np.asarray(obj.mesh.sample_points_poisson_disk(500).points)
+            self.mesh_cache[obj.name] = points
+        else:
+            points = self.mesh_cache[obj.name]
+
         cam2obj = invert_homogeneous(cam_pose) @ obj.pose
         rvec, _ = cv2.Rodrigues(cam2obj[:3, :3])
         tvec = cam2obj[:3, 3]
