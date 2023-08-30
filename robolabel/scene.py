@@ -30,6 +30,10 @@ class Scene(Observable):
         self.objects.update({obj.name: obj})
         self.notify(Event.OBJECT_ADDED, object=obj)
 
+    def remove_object(self, obj: LabelledObject):
+        self.objects.pop(obj.name)
+        self.notify(Event.OBJECT_REMOVED, object=obj)
+
     def select_camera_by_id(self, unique_id):
         self.selected_camera = self.cameras[unique_id]
 

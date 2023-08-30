@@ -32,6 +32,9 @@ class ViewPoseRegistration(Observer, ttk.Frame):
             # configure choices for object selection
             self.object_selection.configure(values=[o.name for o in self.scene.objects.values()])
             self.listen_to(kwargs["object"])
+        elif event == Event.OBJECT_REMOVED:
+            # configure choices for object selection
+            self.object_selection.configure(values=[o.name for o in self.scene.objects.values()])
         elif event == Event.OBJECT_REGISTERED:
             # update controls rerender buffer
             self._update_gui_from_object_pose()

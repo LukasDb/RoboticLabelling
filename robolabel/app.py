@@ -4,8 +4,6 @@ import tkinter.filedialog as filedialog
 import numpy as np
 import json
 from pathlib import Path
-import logging
-import coloredlogs
 
 from robolabel.scene import Scene
 from robolabel.robot import MockRobot, FanucCRX10iAL
@@ -13,10 +11,6 @@ from robolabel.camera import DemoCam, Realsense, ZedCamera
 from robolabel.labelled_object import LabelledObject
 from robolabel.operators import CameraCalibrator, PoseRegistrator
 from robolabel.gui import Overview, ViewAcquisition, ViewPoseRegistration, ViewCalibration
-
-
-coloredlogs.install()
-logging.basicConfig(level=logging.DEBUG)
 
 
 class App:
@@ -98,7 +92,7 @@ class App:
             obj = LabelledObject(
                 obj_data["name"],
                 Path(obj_data["mesh_path"]),
-                np.array(obj_data["semantic_color"]).astype(np.uint8),
+                obj_data["semantic_color"],
             )
 
             if obj_data["registered"]:
@@ -123,7 +117,7 @@ class App:
                     "mesh_path": str(obj.mesh_path),
                     "pose": obj.pose.tolist(),
                     "registered": obj.registered,
-                    "semantic_color": obj.semantic_color.tolist(),
+                    "semantic_color": obj.semantic_color,
                 }
                 for name, obj in self.scene.objects.items()
             ],
@@ -143,7 +137,13 @@ class App:
 
         path = Path(file.name)
 
-        new_object = LabelledObject(path.stem, path)
+        obj_name = path.stem
+        if obj_name in self.scene.objects:
+            i = 1
+            while f"{obj_name}_{i}" in self.scene.objects:
+                i += 1
+            obj_name = f"{obj_name}_{i}"
+        new_object = LabelledObject(obj_name, path)
         monitor_pose = self.scene.background.pose
         new_object.pose = monitor_pose  # add this as inital position
         self.scene.add_object(new_object)

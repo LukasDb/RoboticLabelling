@@ -75,6 +75,13 @@ class Overview(Observer, tk.Frame):
             self.listen_to(kwargs["object"])
             self._add_object_row(kwargs["object"])
 
+        elif event == Event.OBJECT_REMOVED:
+            obj_name = kwargs["object"].name
+            # remove gui elements
+            for child in self._object_rows[obj_name].values():
+                child.destroy()
+            self._object_rows.pop(obj_name)
+
         elif event == Event.OBJECT_REGISTERED:
             self._update_object_row(subject.name)
 
@@ -164,7 +171,9 @@ class Overview(Observer, tk.Frame):
             robot_pose = cam.parent.pose
             np.savetxt(str(data_folder / f"poses/{idx}.txt"), robot_pose)
         if frame.rgb is not None:
-            cv2.imwrite(str(data_folder / f"images/{idx}.png"), frame.rgb)
+            cv2.imwrite(
+                str(data_folder / f"images/{idx}.png"), cv2.cvtColor(frame.rgb, cv2.COLOR_BGR2RGB)
+            )
         if frame.depth is not None:
             np.save(str(data_folder / f"depth/{idx}.npy"), frame.depth)
 
@@ -215,14 +224,15 @@ class Overview(Observer, tk.Frame):
         self.object_overview.columnconfigure(0, weight=1)
         self.object_overview.columnconfigure(1, weight=1)
         self.object_overview.columnconfigure(2, weight=1)
+        self.object_overview.columnconfigure(3, weight=1)
 
-        columns = ["Object", "Registered?", "Color"]
+        columns = ["Object", "Registered?", "Color", "Remove"]
         for i, c in enumerate(columns):
             label = tk.Label(self.object_overview, text=c)
             label.grid(row=0, column=i, sticky=tk.EW)
         # add separator
         sep = ttk.Separator(self.object_overview, orient=tk.HORIZONTAL)
-        sep.grid(row=1, column=0, sticky=tk.EW, columnspan=2)
+        sep.grid(row=1, column=0, sticky=tk.EW, columnspan=4)
 
         for c in self._scene.objects.values():
             self._add_object_row(c)
@@ -246,10 +256,19 @@ class Overview(Observer, tk.Frame):
             lambda event: self._on_object_color_click(obj),
         )
 
+        # add remove button
+        remove_button = ttk.Button(
+            self.object_overview,
+            text="x",
+            command=lambda: self._scene.remove_object(obj),
+        )
+        remove_button.grid(row=row_num, column=3)
+
         self._object_rows[obj.name] = {
             "obj_name": obj_name,
             "registered": registered,
             "color": color,
+            "remove": remove_button,
         }
         # update values
         self._update_object_row(obj.name)
@@ -322,5 +341,5 @@ class Overview(Observer, tk.Frame):
 
     def _on_object_color_click(self, obj: LabelledObject):
         colors = askcolor(title="Object Semantic Color")
-        obj.semantic_color = np.ndarray(colors[0])
+        obj.semantic_color = colors[0]
         self._update_object_row(obj.name)

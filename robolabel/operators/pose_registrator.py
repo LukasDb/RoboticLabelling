@@ -64,7 +64,6 @@ class PoseRegistrator:
 
         valid_campose_icp = []
         for datapoint in tqdm(self.datapoints, desc="ICP"):
-            # initial_guess = np.linalg.inv(obj.pose) @ datapoint.pose
             initial_guess = np.linalg.inv(datapoint.pose) @ obj.pose
             intrinsics = o3d.camera.PinholeCameraIntrinsic(
                 width=datapoint.depth.shape[1],
@@ -150,9 +149,8 @@ class PoseRegistrator:
         # clip to image size
         projected_points = np.clip(projected_points, 0, np.array(rgb.shape[1::-1]) - 1)
 
-        # rgb[projected_points[:, 0, 1], projected_points[:, 0, 0]] = obj.semantic_color
         for point in projected_points:
-            cv2.circle(rgb, tuple(point[0]), 4, obj.semantic_color.tolist(), -1)
+            cv2.circle(rgb, tuple(point[0]), 4, obj.semantic_color, -1)
         return rgb
 
     def _optimize_object_pose(self, world2object, world2camera, camera2object):
