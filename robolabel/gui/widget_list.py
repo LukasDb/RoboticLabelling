@@ -7,18 +7,26 @@ class WidgetList(ttk.Frame):
     """Dynamic Table-like list of widgets"""
 
     def __init__(
-        self, master, *, column_names: List[str], columns: List[type[ttk.Widget]], **kwargs
+        self,
+        master,
+        *,
+        column_names: List[str] | None = None,
+        columns: List[type[ttk.Widget]],
+        **kwargs
     ) -> None:
         super().__init__(
             master,
             **kwargs,
         )
 
-        for i, c in enumerate(column_names):
-            header = ttk.Label(self, text=c)
-            header.grid(row=0, column=i, sticky=tk.EW)
-        sep = ttk.Separator(self, orient=tk.HORIZONTAL)
-        sep.grid(column=0, sticky=tk.EW, columnspan=len(column_names))
+        self.header_offset = 0
+        if column_names is not None:
+            self.header_offset = 2
+            for i, c in enumerate(column_names):
+                header = ttk.Label(self, text=c)
+                header.grid(row=0, column=i, sticky=tk.EW)
+            sep = ttk.Separator(self, orient=tk.HORIZONTAL)
+            sep.grid(column=0, sticky=tk.EW, columnspan=len(column_names))
 
         self.rows: List[Tuple[ttk.Widget]] = []
         self.widgets = columns
@@ -30,7 +38,7 @@ class WidgetList(ttk.Frame):
         row_tuple = []
         for i, (w, kwargs) in enumerate(zip(self.widgets, kwargs_list)):
             new_widget = w(self, **kwargs)
-            new_widget.grid(sticky=tk.EW, row=len(self.rows) + 2, column=i)
+            new_widget.grid(sticky=tk.EW, row=len(self.rows) + self.header_offset, column=i)
             row_tuple.append(new_widget)
 
         self.rows.append(row_tuple)
