@@ -11,7 +11,7 @@ class WidgetList(ttk.Frame):
         master,
         *,
         column_names: List[str] | None = None,
-        columns: List[type[ttk.Widget]],
+        columns: List[type[ttk.Widget | tk.Widget]],
         **kwargs
     ) -> None:
         super().__init__(
@@ -28,10 +28,10 @@ class WidgetList(ttk.Frame):
             sep = ttk.Separator(self, orient=tk.HORIZONTAL)
             sep.grid(column=0, sticky=tk.EW, columnspan=len(column_names))
 
-        self.rows: List[Tuple[ttk.Widget]] = []
+        self.rows: List[Tuple[ttk.Widget | tk.Widget]] = []
         self.widgets = columns
 
-    def add_new_row(self, kwargs_list: None | List[dict] = None) -> List[tk.Widget]:
+    def add_new_row(self, kwargs_list: None | List[dict] = None):
         if kwargs_list is None:
             kwargs_list = [{} for _ in self.widgets]
 
@@ -41,7 +41,7 @@ class WidgetList(ttk.Frame):
             new_widget.grid(sticky=tk.EW, row=len(self.rows) + self.header_offset, column=i)
             row_tuple.append(new_widget)
 
-        self.rows.append(row_tuple)
+        self.rows.append(tuple(row_tuple))
         return row_tuple
 
     def pop(self, index):

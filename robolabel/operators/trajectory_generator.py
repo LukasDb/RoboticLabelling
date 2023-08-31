@@ -79,7 +79,7 @@ class TrajectoryGenerator:
 
         # current_i = np.random.choice(np.arange(len(positions)))
         # set start highest point
-        current_i = np.argmax(positions[:, 2])
+        current_i = int(np.argmax(positions[:, 2]))
 
         for _ in range(len(positions)):
             candidates.remove(current_i)
@@ -121,7 +121,7 @@ class TrajectoryGenerator:
         self._current_trajectory = trajectory
 
     def visualize_trajectory(self, camera: Camera, objects: list[LabelledObject]) -> None:
-        assert self._current_trajectory is not None, "No trajectory generated yet"
+        assert self._current_trajectory is not None, "Generate trajectory first"
 
         frame = camera.get_frame()
         assert frame.rgb is not None, "Camera has no RGB frame"
@@ -161,8 +161,8 @@ class TrajectoryGenerator:
             mesh.transform(obj.pose)
             object_meshes.append(mesh)
 
-        o3d.visualization.draw_geometries([*vis_views, lines, origin, *object_meshes])
+        o3d.visualization.draw_geometries([*vis_views, lines, origin, *object_meshes])  # type: ignore
 
-    def get_current_trajectory(self) -> None | list[np.ndarray]:
+    def get_current_trajectory(self) -> list[np.ndarray]:
         assert self._current_trajectory is not None, "No trajectory generated yet"
         return self._current_trajectory

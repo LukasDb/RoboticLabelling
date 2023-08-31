@@ -1,4 +1,4 @@
-from .camera import Camera, CamFrame, threadsafe
+from .camera import Camera, CamFrame
 import numpy as np
 import cv2
 from pathlib import Path
@@ -27,7 +27,9 @@ class DemoCam(Camera):
         self.window.attributes("-type", "dialog")
 
         # selectbox
-        self.selectbox = ttk.Combobox(self.window, values=list(Path("demo_data").iterdir()))
+        self.selectbox = ttk.Combobox(
+            self.window, values=list(str(x) for x in Path("demo_data").iterdir())
+        )
         self.selectbox.bind("<<ComboboxSelected>>", lambda _: self._on_data_selected())
         self.selectbox.grid(row=0, column=0, sticky=tk.NSEW)
 
@@ -50,25 +52,21 @@ class DemoCam(Camera):
         )
         self.slider.grid(row=2, column=0, sticky=tk.NSEW)
 
-    @threadsafe
     def _on_slider_change(self, value):
         self.img_index = int(value)
 
-    @threadsafe
     def _toggle_auto_play(self):
         self.auto_play = not self.auto_play
 
-    @threadsafe
     def _on_data_selected(self):
         # update indices for slider
-        self.selectbox.configure(values=list(Path("demo_data").iterdir()))
+        self.selectbox.configure(values=list(str(x) for x in Path("demo_data").iterdir()))
         self.data_folder = self.selectbox.get()
         img_path = Path(f"{self.data_folder}/images").glob("*.png")
         self.n_images = len(list(img_path))
         self.slider.configure(to=self.n_images - 1)
         self.slider.set(0)
 
-    @threadsafe
     def get_frame(self) -> CamFrame:
         if self.data_folder is None:
             return CamFrame()
@@ -82,8 +80,8 @@ class DemoCam(Camera):
 
         # img_path = next(self.img_paths)
         img_path = Path(f"{self.data_folder}/images/{self.img_index}.png")
-        img = cv2.imread(str(img_path))
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img = cv2.imread(str(img_path)) # type: ignore
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) # type: ignore
         depth = None
 
         try:
@@ -94,9 +92,9 @@ class DemoCam(Camera):
         pose_path = Path(f"{self.data_folder}/poses/{self.img_index}.txt")
         robot_pose = np.loadtxt(str(pose_path))
 
-        if "Intel RealSense D415_0" in self.data_folder and self._link_matrix is not None:
+        if "Intel RealSense D415_0" in self.data_folder and self._extrinsics is not None:
             # accidentally saved camera pose instead of robot pose
-            robot_pose = robot_pose @ invert_homogeneous(self._link_matrix)
+            robot_pose = robot_pose @ invert_homogeneous(self._extrinsics)
 
         # update mock robot pose
         if self.robot is not None:

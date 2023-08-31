@@ -12,7 +12,7 @@ def invert_homogeneous(T):
 
 def get_affine_matrix_from_6d_vector(seq, vector):
     if seq == "Rodriguez":
-        rot, _ = cv2.Rodrigues(vector[3:])
+        rot, _ = cv2.Rodrigues(vector[3:]) # type: ignore
         return homogeneous_mat_from_RT(rot, vector[:3])
 
     rotation = R.from_euler(seq, vector[3:])
@@ -21,7 +21,7 @@ def get_affine_matrix_from_6d_vector(seq, vector):
 
 def get_6d_vector_from_affine_matrix(seq, affine):
     if seq == "Rodriguez":
-        rot, _ = cv2.Rodrigues(affine[:3, :3])
+        rot, _ = cv2.Rodrigues(affine[:3, :3]) # type: ignore
         return np.concatenate([affine[:3, 3], rot])
 
     rotation = R.from_matrix(affine[:3, :3])
@@ -71,5 +71,5 @@ def get_euler_from_affine_matrix(affine):
 def get_rvec_tvec_from_affine_matrix(affine):
     rot = affine[:3, :3]
     tvec = affine[:3, 3]
-    rvec, _ = cv2.Rodrigues(rot)
+    rvec, _ = cv2.Rodrigues(rot) # type: ignore
     return rvec, tvec

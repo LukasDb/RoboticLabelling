@@ -7,6 +7,7 @@ import cv2
 import logging
 from robolabel.lib.geometry import *
 from dataclasses import dataclass
+from robolabel.lib.resizable_image import ResizableImage
 
 
 @dataclass
@@ -30,9 +31,7 @@ class BackgroundMonitor(Entity):
         self.window.title("Background Monitor -> MOVE THIS WINDOW TO SECONDARY MONITOR")
 
         # create fullscreen canvas
-        self.canvas = tk.Canvas(self.window)
-        # add image container
-        self.image_container = self.canvas.create_image(0, 0, anchor=tk.NW)
+        self.canvas = ResizableImage(self.window, keep_aspect_ratio=False)
         self.canvas.pack(fill=tk.BOTH, expand=True)
 
         # move window to second screen
@@ -47,10 +46,11 @@ class BackgroundMonitor(Entity):
             ]
 
         bg_paths = np.random.choice(
-            list(pathlib.Path(settings.backgrounds_path).iterdir()), size=settings.n_steps
+            list(str(x) for x in pathlib.Path(settings.backgrounds_path).iterdir()),
+            size=settings.n_steps,
         )
 
-        return [{"background": str(p)} for p in bg_paths]
+        return [{"background": p} for p in bg_paths]
 
     def set_step(self, step: dict) -> None:
         if "background" in step:
@@ -69,15 +69,15 @@ class BackgroundMonitor(Entity):
         logging.info(f"Setting background monitor to {textured_path.name}")
         self._load_image_to_full_canvas(textured_path)
 
-    def _load_image_to_full_canvas(self, path: pathlib.Path):
+    def _load_image_to_full_canvas(self, path: pathlib.Path) -> None:
         with path.open("rb") as f:
             bg = np.asarray(Image.open(f))
         # scale image to fill the screen
-        bg = cv2.resize(
+        bg = cv2.resize(  # type: ignore
             bg,
             (
-                int(self.width),
-                int(self.height),
+                int(self.window.winfo_width()),
+                int(self.window.winfo_height()),
             ),
         )
         self.set_image(bg)
@@ -116,10 +116,11 @@ class BackgroundMonitor(Entity):
             self.screen_width_m = 16 / diagonal_16_by_9 * 0.800
             self.screen_height_m = 9 / diagonal_16_by_9 * 0.800
 
-    def set_image(self, image: np.ndarray):
+    def set_image(self, image: np.ndarray) -> None:
         """Set the image of the background monitor"""
-        self.image_tk = ImageTk.PhotoImage(image=Image.fromarray(image))
-        self.canvas.itemconfig(self.image_container, image=self.image_tk)
+        # self.image_tk = ImageTk.PhotoImage(image=Image.fromarray(image))
+        # self.canvas.itemconfig(self.image_container, image=self.image_tk)
+        self.canvas.set_image(image)
 
     def draw_on_rgb(self, rgb, intrinsic, dist_coeffs, cam2monitor, color=(0, 255, 0)):
         """Draw the background monitor on the rgb image"""
@@ -136,8 +137,7 @@ class BackgroundMonitor(Entity):
         )
 
         screen_corners_cam = cam2monitor @ screen_corners.T
-        # screen_corners_world = self.pose @ screen_corners.T
-        img_points, _ = cv2.projectPoints(
+        img_points, _ = cv2.projectPoints(  # type: ignore
             screen_corners_cam.T[:, :3],
             np.zeros(
                 3,
@@ -151,11 +151,11 @@ class BackgroundMonitor(Entity):
 
         img_points = img_points.astype(np.int32)
 
-        cv2.drawContours(
+        cv2.drawContours(  # type: ignore
             rgb,
             [img_points],
             -1,  # draw all contours
             color,
             3,  # negative == filled
-            lineType=cv2.LINE_AA,
+            lineType=cv2.LINE_AA,  # type: ignore
         )

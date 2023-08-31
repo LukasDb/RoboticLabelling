@@ -17,8 +17,8 @@ class Scene(Observable):
         self.background = BackgroundMonitor()
         self.lights = LightsController()
         # TODO self.lighting = LightController()
-        self.selected_camera: Camera = None
-        self.selected_object: LabelledObject = None
+        self.selected_camera: Camera | None = None
+        self.selected_object: LabelledObject | None = None
 
     def add_camera(self, camera: Camera):
         self.cameras.update({camera.unique_id: camera})
@@ -36,8 +36,9 @@ class Scene(Observable):
         self.objects.pop(obj.name)
         self.notify(Event.OBJECT_REMOVED, object=obj)
 
-    def select_camera_by_id(self, unique_id):
+    def select_camera_by_id(self, unique_id: str):
         self.selected_camera = self.cameras[unique_id]
+        self.notify(Event.CAMERA_SELECTED, camera=self.selected_camera)
 
     def select_object_by_name(self, name):
         self.selected_object = self.objects[name]

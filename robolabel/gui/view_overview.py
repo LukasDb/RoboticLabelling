@@ -12,8 +12,8 @@ import cv2
 from robolabel.scene import Scene
 from robolabel.labelled_object import LabelledObject
 from robolabel.observer import Observer, Event
-from .resizable_image import ResizableImage
-from .widget_list import WidgetList
+from ..lib.resizable_image import ResizableImage
+from ..lib.widget_list import WidgetList
 from robolabel.operators import CameraCalibrator, PoseRegistrator
 
 
@@ -32,8 +32,8 @@ class Overview(Observer, tk.Frame):
         self._registrator = registrator
         self.listen_to(self._scene)
 
-        self.cam_list: None | WidgetList = None
-        self.object_list: None | WidgetList = None
+        self.cam_list: WidgetList
+        self.object_list: WidgetList
 
         self.title = ttk.Label(self, text="Overview")
         self.controls = self.setup_controls(self)
@@ -152,6 +152,9 @@ class Overview(Observer, tk.Frame):
             (data_folder / "poses").mkdir(parents=True, exist_ok=True)
 
         cam = self._scene.selected_camera
+        if cam is None:
+            logging.error("No camera selected")
+            return
         idx = len(list(data_folder.glob("images/*.png")))
 
         frame = cam.get_frame()
@@ -159,8 +162,8 @@ class Overview(Observer, tk.Frame):
             robot_pose = cam.robot.pose
             np.savetxt(str(data_folder / f"poses/{idx}.txt"), robot_pose)
         if frame.rgb is not None:
-            cv2.imwrite(
-                str(data_folder / f"images/{idx}.png"), cv2.cvtColor(frame.rgb, cv2.COLOR_BGR2RGB)
+            cv2.imwrite(  # type: ignore
+                str(data_folder / f"images/{idx}.png"), cv2.cvtColor(frame.rgb, cv2.COLOR_BGR2RGB)  # type: ignore
             )
         if frame.depth is not None:
             np.save(str(data_folder / f"depth/{idx}.npy"), frame.depth)
@@ -252,8 +255,8 @@ class Overview(Observer, tk.Frame):
                 self.live_canvas.set_image(img)
 
             if frame.depth is not None:
-                colored_depth = cv2.applyColorMap(
-                    cv2.convertScaleAbs(frame.depth, alpha=255 / 2.0), cv2.COLORMAP_JET
+                colored_depth = cv2.applyColorMap(  # type: ignore
+                    cv2.convertScaleAbs(frame.depth, alpha=255 / 2.0), cv2.COLORMAP_JET  # type: ignore
                 )
                 self.live_canvas2.set_image(colored_depth)
             else:

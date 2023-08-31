@@ -1,19 +1,20 @@
 import pickle
 import numpy as np
 from pathlib import Path
-import streamlit as st
 import cv2
 from typing import List, Dict
 from robolabel.scene import Scene
 from robolabel.lib.geometry import invert_homogeneous, get_affine_matrix_from_6d_vector
+from robolabel.observer import Event, Observable, Observer
+from robolabel.camera import Camera
 import cv2
 from tqdm import tqdm
-from cv2 import aruco
+from cv2 import aruco  # type: ignore
 from scipy import optimize
 import logging
 
 
-class CameraCalibrator:
+class CameraCalibrator(Observer):
     CHESSBOARD_SIZE = 0.0286  # better 0.05 or bigger
     MARKER_SIZE = 0.023
     MARKERS = (7, 5)
@@ -23,8 +24,11 @@ class CameraCalibrator:
         # needs to be persistent (which is not the case here)
         super().__init__()
         self._scene = scene
+        self.listen_to(self._scene)
         self.captured_images: List[np.ndarray] = []
         self.captured_robot_poses: List[np.ndarray] = []
+
+        self.camera: Camera | None = None
 
         self.calibration_results: List[Dict] = []
 
@@ -33,6 +37,13 @@ class CameraCalibrator:
         self.markers2monitor = np.eye(4)
 
         self.mock_i = 0
+
+    def update_observer(self, subject: Observable, event: Event, *args, **kwargs):
+        if event == Event.CAMERA_SELECTED:
+            if len(self.captured_images) != 0:
+                logging.error("Calibration resetted because of camera switch.")
+                self.reset()
+            self.camera: Camera | None = kwargs["camera"]
 
     def reset(self) -> None:
         self.captured_images.clear()
@@ -60,13 +71,13 @@ class CameraCalibrator:
         """dump calibration as config dict"""
         cal_data = {}
         for c in self._scene.cameras.values():
-            if c.intrinsic_matrix is None:
+            if c.intrinsic_matrix is None or c.dist_coeffs is None or c.extrinsic_matrix is None:
                 continue
 
             cal_data[c.unique_id] = {
                 "intrinsic": c.intrinsic_matrix.tolist(),
                 "dist_coeffs": c.dist_coeffs.tolist(),
-                "extrinsic": c._link_matrix.tolist(),
+                "extrinsic": c.extrinsic_matrix.tolist(),
                 "attached_to": "none" if c.robot is None else c.robot.name,
             }
 
@@ -79,8 +90,15 @@ class CameraCalibrator:
         self.setup_charuco_board()
 
     def capture_image(self):
-        img = self._scene.selected_camera.get_frame().rgb
-        robot_pose = self._scene.selected_camera.robot.pose
+        if self.camera is None:
+            logging.error("No camera selected")
+            return
+        img = self.camera.get_frame().rgb
+        if self.camera.robot is None:
+            logging.error("Camera is not attached to a robot")
+            return
+
+        robot_pose = self.camera.robot.pose
 
         if img is None:
             logging.error("No image captured")
@@ -99,12 +117,16 @@ class CameraCalibrator:
             logging.error("Please setup charuco board first")
             return
 
+        if self.camera is None:
+            logging.error("No camera selected")
+            return
+
         allCorners = []
         allIds = []
         allImgs = []
         allRobotPoses = []
         # SUB PIXEL CORNER DETECTION CRITERION
-        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 0.00001)
+        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 0.00001)  # type: ignore
 
         gray = None
         for img, pose, cal_result in tqdm(
@@ -115,8 +137,9 @@ class CameraCalibrator:
             ),
             desc="Detecting markers",
         ):
-            gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-            corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(gray, self.aruco_dict)
+            gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)  # type: ignore
+            assert gray is not None, "No image captured"
+            corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(gray, self.aruco_dict)  # type: ignore
 
             cal_result.update({"detected": len(corners) > 0, "corners": corners, "ids": ids})
 
@@ -124,7 +147,7 @@ class CameraCalibrator:
                 # SUB PIXEL DETECTION
                 # cv2.aruco.drawDetectedMarkers(img, corners, ids)
                 for corner in corners:
-                    cv2.cornerSubPix(
+                    cv2.cornerSubPix(  # type: ignore
                         gray,
                         corner,
                         winSize=(3, 3),
@@ -132,7 +155,7 @@ class CameraCalibrator:
                         criteria=criteria,
                     )
 
-                _, inter_corners, inter_ids = cv2.aruco.interpolateCornersCharuco(
+                _, inter_corners, inter_ids = cv2.aruco.interpolateCornersCharuco(  # type: ignore
                     corners, ids, gray, self.charuco_board
                 )
                 if inter_corners is not None and inter_ids is not None and len(inter_corners) > 3:
@@ -148,7 +171,7 @@ class CameraCalibrator:
 
         assert len(allCorners) > 0, "No charuco corners detected"
 
-        imsize = gray.shape
+        imsize = gray.shape  # type: ignore
 
         cameraMatrixInit = np.array(
             [
@@ -160,7 +183,7 @@ class CameraCalibrator:
 
         distCoeffsInit = np.zeros((5, 1))
         flags = (
-            cv2.CALIB_USE_INTRINSIC_GUESS + cv2.CALIB_RATIONAL_MODEL + cv2.CALIB_FIX_ASPECT_RATIO
+            cv2.CALIB_USE_INTRINSIC_GUESS + cv2.CALIB_RATIONAL_MODEL + cv2.CALIB_FIX_ASPECT_RATIO  # type: ignore
         )
         # flags = (cv2.CALIB_RATIONAL_MODEL)
         logging.info("Calibrating intrinsics...")
@@ -173,7 +196,7 @@ class CameraCalibrator:
             _,
             _,
             _,
-        ) = cv2.aruco.calibrateCameraCharucoExtended(
+        ) = cv2.aruco.calibrateCameraCharucoExtended(  # type: ignore
             charucoCorners=allCorners,
             charucoIds=allIds,
             board=self.charuco_board,
@@ -181,7 +204,7 @@ class CameraCalibrator:
             cameraMatrix=cameraMatrixInit,
             distCoeffs=distCoeffsInit,
             flags=flags,
-            criteria=(cv2.TERM_CRITERIA_EPS & cv2.TERM_CRITERIA_COUNT, 10000, 1e-9),
+            criteria=(cv2.TERM_CRITERIA_EPS & cv2.TERM_CRITERIA_COUNT, 10000, 1e-9),  # type: ignore
         )
         assert ret, "Calibration failed"
 
@@ -210,12 +233,12 @@ class CameraCalibrator:
         t_target2cam = tvecs
         # R_cam2gripper = extrinsic_matrix[:3, :3]  # to be estimated
         # t_cam2gripper = extrinsic_matrix[:3, 3]  # to be estamated
-        R_cam2gripper, t_cam2gripper = cv2.calibrateHandEye(
+        R_cam2gripper, t_cam2gripper = cv2.calibrateHandEye(  # type: ignore
             R_gripper2base,
             t_gripper2base,
             R_target2cam,
             t_target2cam,
-            method=cv2.CALIB_HAND_EYE_TSAI,
+            method=cv2.CALIB_HAND_EYE_TSAI,  # type: ignore
         )
 
         extrinsic_matrix = np.eye(4)
@@ -225,11 +248,11 @@ class CameraCalibrator:
         self._scene.background.pose = world2markers @ self.markers2monitor
 
         # set camera atttributes
-        self._scene.selected_camera.set_calibration(camera_matrix, dist_coeffs, extrinsic_matrix)
+        self.camera.set_calibration(camera_matrix, dist_coeffs, extrinsic_matrix)
 
     def draw_calibration(self, rgb: np.ndarray) -> np.ndarray:
         monitor = self._scene.background
-        cam = self._scene.selected_camera
+        cam = self.camera
         if cam is None:
             return rgb
 
@@ -249,7 +272,9 @@ class CameraCalibrator:
             return None
 
         monitor = self._scene.background
-        cam = self._scene.selected_camera
+        cam = self.camera
+        if cam is None:
+            return None
 
         img = self.captured_images[index].copy()
 
@@ -271,7 +296,7 @@ class CameraCalibrator:
         pose6d = cal_result["estimated_pose6d"]
 
         if len(corners) > 0:
-            cv2.aruco.drawDetectedMarkers(img, corners, ids)
+            cv2.aruco.drawDetectedMarkers(img, corners, ids)  # type: ignore
 
         # draw per-image calibration result
         mat = get_affine_matrix_from_6d_vector("Rodriguez", pose6d)
@@ -283,7 +308,6 @@ class CameraCalibrator:
             cam2monitor,
             color=(255, 0, 0),
         )
-
         return img
 
     def setup_charuco_board(self):
@@ -324,13 +348,13 @@ class CameraCalibrator:
 
         hor_pad = round((width - charuco_img_width) / 2)
         vert_pad = round((height - charuco_img_height) / 2)
-        charuco_img = cv2.copyMakeBorder(
+        charuco_img = cv2.copyMakeBorder(  # type: ignore
             charuco_img,
             vert_pad,
             vert_pad,
             hor_pad,
             hor_pad,
-            cv2.BORDER_CONSTANT,
+            cv2.BORDER_CONSTANT,  # type: ignore
             value=(0, 0, 0),
         )
 

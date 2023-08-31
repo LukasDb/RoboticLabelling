@@ -15,7 +15,7 @@ class SettingsWidget(ttk.Frame):
 
         self.dataclass = dataclass
         self.fields: dict[str, dataclasses.Field] = dataclass.__dataclass_fields__
-        self.vars: list[tk.Variable] = {}
+        self.vars: dict[str, tk.Variable | tuple] = {}
 
         if not hasattr(dataclass, "__dataclass_fields__"):
             raise ValueError("dataclass must be a dataclass")
@@ -46,15 +46,16 @@ class SettingsWidget(ttk.Frame):
             var = tk.StringVar()
             widget = ttk.Entry(master, textvariable=var)
 
-        elif dtype.__origin__ is tuple:
+        elif dtype.__origin__ is tuple:  # type: ignore
             widget = ttk.Frame(master)
             var = []
-            for offset, t in enumerate(dtype.__args__):
+            for offset, t in enumerate(dtype.__args__):  # type: ignore
                 var.append(self.create_entry_widget(widget, row, column + offset, t))
+            var = tuple(var)
 
         else:
-            print(f"could not create widget for field {dtype}")
-            return
+            raise ValueError(f"Unsupported type {dtype}")
+        
         widget.grid(row=row, column=column, sticky=tk.EW, padx=10)
         self.max_columns = max(self.max_columns, column + 1)
         return var

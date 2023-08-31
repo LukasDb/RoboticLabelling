@@ -56,6 +56,10 @@ class Acquisition:
         if len(set([c.robot for c in cameras])) != 1:
             raise ValueError("All selected cameras must be attached to the same robot")
 
+        if cameras[0].robot is None:
+            logging.error("Cameras must be attached to a a robot")
+            return
+
         robot: Robot = cameras[0].robot
 
         if robot.home_pose is None:

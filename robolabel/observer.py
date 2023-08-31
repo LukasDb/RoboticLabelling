@@ -7,6 +7,7 @@ class Event(Enum):
     CAMERA_ADDED = auto()
     CAMERA_CALIBRATED = auto()
     CAMERA_ATTACHED = auto()
+    CAMERA_SELECTED = auto()
     OBJECT_ADDED = auto()
     OBJECT_REGISTERED = auto()
     OBJECT_REMOVED = auto()

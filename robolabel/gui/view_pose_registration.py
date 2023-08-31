@@ -4,7 +4,7 @@ from robolabel.lib.geometry import get_euler_from_affine_matrix
 
 from robolabel.scene import Scene
 from robolabel.observer import Event, Observable, Observer
-from .resizable_image import ResizableImage
+from ..lib.resizable_image import ResizableImage
 from robolabel.operators import PoseRegistrator
 
 
@@ -151,6 +151,9 @@ class ViewPoseRegistration(Observer, ttk.Frame):
         self._update_gui_from_object_pose()
 
     def _update_gui_from_object_pose(self):
+        if self.scene.selected_object is None:
+            return
+
         (rho, phi, theta), (x, y, z) = get_euler_from_affine_matrix(
             self.scene.selected_object.pose
         )
@@ -207,7 +210,8 @@ class ViewPoseRegistration(Observer, ttk.Frame):
 
     def _on_reset_pose(self):
         monitor_pose = self.scene.background.pose
-        self.scene.selected_object.pose = monitor_pose  # add this as inital position
+        if self.scene.selected_object is not None:
+            self.scene.selected_object.pose = monitor_pose  # add this as inital position
         self._update_gui_from_object_pose()
         self._preview_buffer()
 

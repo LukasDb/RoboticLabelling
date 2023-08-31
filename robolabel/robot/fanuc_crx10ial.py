@@ -1,9 +1,11 @@
-from .robot import Robot, threadsafe
+from .robot import Robot
 import numpy as np
 import requests
 import json
 from scipy.spatial.transform import Rotation as R
 import logging
+
+# TODO write in asyncio
 
 
 class FanucCRX10iAL(Robot):
@@ -15,14 +17,12 @@ class FanucCRX10iAL(Robot):
     def move_to(self, pose: np.ndarray, block=True):
         raise NotImplementedError("TODO: Implement move to for fanuc")
 
-    @threadsafe
     def set_current_as_homepose(self) -> None:
         pose = self._fetch_current_pose()
         self.home_pose = pose
         logging.info(f"Set robot {self.name}'s home pose to {pose[:3, 3]}")
 
     @property
-    @threadsafe
     def pose(self) -> np.ndarray:
         pose = self._fetch_current_pose()
         self._pose = pose

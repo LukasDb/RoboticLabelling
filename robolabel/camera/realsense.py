@@ -1,4 +1,4 @@
-from .camera import Camera, CamFrame, threadsafe
+from .camera import Camera, CamFrame
 import numpy as np
 from typing import List
 import cv2
@@ -14,12 +14,12 @@ class Realsense(Camera):
 
     @staticmethod
     def get_available_devices() -> List["Realsense"]:
-        ctx = rs.context()
+        ctx = rs.context()  # type: ignore
         devices = ctx.query_devices()
         cams = []
         for dev in devices:
-            logging.info(f"Found device: {dev.get_info(rs.camera_info.name)}")
-            serial_number = dev.get_info(rs.camera_info.serial_number)
+            logging.info(f"Found device: {dev.get_info(rs.camera_info.name)}")  # type: ignore
+            serial_number = dev.get_info(rs.camera_info.serial_number)  # type: ignore
             cams.append(Realsense(serial_number))
         return cams
 
@@ -27,11 +27,11 @@ class Realsense(Camera):
         self.is_hq_depth = True
         self._serial_number = serial_number
 
-        self._pipeline = rs.pipeline()
-        self._config = config = rs.config()
+        self._pipeline = rs.pipeline()  # type: ignore
+        self._config = config = rs.config()  # type: ignore
         # config.enable_device(self._serial_number)
 
-        pipeline_wrapper = rs.pipeline_wrapper(self._pipeline)
+        pipeline_wrapper = rs.pipeline_wrapper(self._pipeline)  # type: ignore
         try:
             pipeline_profile = config.resolve(pipeline_wrapper)
         except RuntimeError:
@@ -40,19 +40,19 @@ class Realsense(Camera):
             )
             exit()
         self.device = pipeline_profile.get_device()
-        super().__init__(self.device.get_info(rs.camera_info.name))
+        super().__init__(self.device.get_info(rs.camera_info.name))  # type: ignore
 
-        config.enable_stream(rs.stream.depth, self.DEPTH_W, self.DEPTH_H, rs.format.z16, 30)
-        config.enable_stream(rs.stream.color, self.RGB_W, self.RGB_H, rs.format.bgr8, 30)
-        self.align_to_rgb = rs.align(rs.stream.color)
+        config.enable_stream(rs.stream.depth, self.DEPTH_W, self.DEPTH_H, rs.format.z16, 30)  # type: ignore
+        config.enable_stream(rs.stream.color, self.RGB_W, self.RGB_H, rs.format.bgr8, 30)  # type: ignore
+        self.align_to_rgb = rs.align(rs.stream.color)  # type: ignore
 
-        self.temporal_filter = rs.temporal_filter(
+        self.temporal_filter = rs.temporal_filter(  # type: ignore
             smooth_alpha=0.2,
             smooth_delta=5,
             persistence_control=2,
         )
 
-        self.spatial_filter = rs.spatial_filter(
+        self.spatial_filter = rs.spatial_filter(  # type: ignore
             smooth_alpha=0.5,
             smooth_delta=20,
             magnitude=2,
@@ -70,7 +70,6 @@ class Realsense(Camera):
             logging.error(f"Could not start camera stream ({self.name})")
             logging.error(e)
 
-    @threadsafe
     def get_frame(self) -> CamFrame:
         output = CamFrame()
         if not self.is_started:
@@ -89,8 +88,8 @@ class Realsense(Camera):
             depth_frame = self.temporal_filter.process(depth_frame)
             depth_frame = self.spatial_filter.process(depth_frame)
 
-        depth_image = np.asanyarray(depth_frame.get_data()).astype(np.float32) * self.depth_scale
-        color_image = cv2.cvtColor(np.asanyarray(color_frame.get_data()), cv2.COLOR_BGR2RGB)
+        depth_image = np.asarray(depth_frame.get_data()).astype(np.float32) * self.depth_scale
+        color_image = cv2.cvtColor(np.asarray(color_frame.get_data()), cv2.COLOR_BGR2RGB)  # type: ignore
 
         output.depth = depth_image
         output.rgb = color_image

@@ -7,7 +7,7 @@ import time
 
 from robolabel.scene import Scene
 from robolabel.operators import CameraCalibrator
-from .resizable_image import ResizableImage
+from ..lib.resizable_image import ResizableImage
 
 
 class ViewCalibration(ttk.Frame):
@@ -92,6 +92,9 @@ class ViewCalibration(ttk.Frame):
 
     def on_capture(self):
         self.calibrator.capture_image()
+        if len(self.calibrator.captured_images) == 0:
+            return
+
         self.image_selection["values"] = [
             f"Image {i:2}" for i in range(len(self.calibrator.captured_images))
         ]

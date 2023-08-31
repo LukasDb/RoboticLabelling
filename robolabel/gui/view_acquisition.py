@@ -4,8 +4,8 @@ import logging
 import asyncio
 
 from robolabel.scene import Scene
-from .widget_list import WidgetList
-from .settings_widget import SettingsWidget
+from ..lib.widget_list import WidgetList
+from ..lib.settings_widget import SettingsWidget
 from robolabel.labelled_object import LabelledObject
 from robolabel.camera import Camera
 from robolabel.observer import Observable, Observer, Event
@@ -209,7 +209,7 @@ class ViewAcquisition(tk.Frame, Observer):
         self.camera_states.clear()
         self.cam_list.clear()
         for cam in self.scene.cameras.values():
-            cam_state = tk.BooleanVar(value="1")
+            cam_state = tk.BooleanVar(value=True)
             self.cam_list.add_new_row(
                 [
                     {"text": cam.unique_id, "variable": cam_state},
@@ -221,7 +221,7 @@ class ViewAcquisition(tk.Frame, Observer):
         self.object_list.clear()
         self.object_states.clear()
         for obj in self.scene.objects.values():
-            obj_state = tk.BooleanVar(value="1")
+            obj_state = tk.BooleanVar(value=True)
             self.object_list.add_new_row([{"text": obj.name, "variable": obj_state}])
             self.object_states[obj.name] = obj_state
 

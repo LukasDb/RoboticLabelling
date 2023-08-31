@@ -1,5 +1,5 @@
 import asyncio
-from ..entity import Entity, threadsafe
+from ..entity import Entity
 import numpy as np
 import logging
 from abc import ABC, abstractmethod

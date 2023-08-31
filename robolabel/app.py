@@ -2,13 +2,13 @@ import tkinter as tk
 from tkinter import ttk
 import tkinter.filedialog as filedialog
 import numpy as np
+from io import IOBase
 import json
 import logging
 from pathlib import Path
 import asyncio
 
 from robolabel.scene import Scene
-from robolabel.observer import Event, Observable, Observer
 from robolabel.robot import MockRobot, FanucCRX10iAL
 from robolabel.camera import DemoCam, Realsense, ZedCamera
 from robolabel.labelled_object import LabelledObject
@@ -49,7 +49,7 @@ class App:
         for cam in ZedCamera.get_available_devices():
             self.scene.add_camera(cam)
 
-        state_path = Path("app_state.json")
+        state_path = Path("app_state.config")
         if state_path.exists():
             with state_path.open("r") as f:
                 data = json.load(f)
@@ -97,8 +97,9 @@ class App:
 
     def _on_close(self):
         logging.warning("Closing app...")
-        state_path = Path("app_state.json")
-        self.save_state(state_path)
+        state_path = Path("app_state.config")
+        with state_path.open("w") as f:
+            self.save_state(f)
         self.stop = True
 
     def run(self):
@@ -117,7 +118,7 @@ class App:
         await asyncio.sleep(1.0)
         logging.info("Tk loop finished.")
 
-    def load_state(self, data):
+    def load_state(self, data: dict) -> None:
         self.calibrator.load(data["camera_calibration"])
         for obj_data in data["objects"]:
             obj = LabelledObject(
@@ -136,7 +137,7 @@ class App:
                 continue
             self.scene.robots[name].home_pose = np.array(pose)
 
-    def save_state(self, file: Path):
+    def save_state(self, file: IOBase) -> None:
         data = {
             "camera_calibration": self.calibrator.dump(),
             "objects": [
@@ -155,31 +156,33 @@ class App:
             },
         }
 
-        with Path(file.name).open("w") as f:
-            json.dump(data, f, indent=2)
+        # with Path(file.name).open("w") as f:
+        json.dump(data, file, indent=2)
 
     def _on_load_config(self):
-        file = filedialog.askopenfile(
+        file = filedialog.askopenfilename(
             title="Select Configuration file",
             filetypes=(("configuration files", "*.config"), ("all files", "*.*")),
         )
-        with Path(file.name).open("r") as f:
+
+        with Path(file).open("r") as f:
             data = json.load(f)
         self.load_state(data)
 
     def _on_save_config(self) -> None:
         default_name = "scene"
 
-        file = filedialog.asksaveasfile(
+        file = filedialog.asksaveasfilename(
             title="Save Configuration file",
             filetypes=(("configuration files", "*.config"), ("all files", "*.*")),
             defaultextension=".config",
             initialfile=default_name,
         )
-        self.save_state(file)
+        with Path(file).open("w") as f:
+            self.save_state(f)
 
     def _on_add_object(self) -> None:
-        file = filedialog.askopenfile(
+        file = filedialog.askopenfilename(
             title="Select Object Ply file",
             filetypes=(("ply files", "*.ply"), ("all files", "*.*")),
         )
@@ -187,7 +190,7 @@ class App:
         if file is None:
             return
 
-        path = Path(file.name)
+        path = Path(file)
 
         obj_name = path.stem
         if obj_name in self.scene.objects:

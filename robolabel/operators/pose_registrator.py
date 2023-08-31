@@ -42,9 +42,21 @@ class PoseRegistrator:
         self.datapoints.clear()
 
     def capture_image(self) -> Datapoint | None:
-        frame = self._scene.selected_camera.get_frame()
-        if frame.rgb is None or self._scene.selected_camera.intrinsic_matrix is None:
+        if self._scene.selected_camera is None:
+            logging.error("No camera selected")
             return None
+
+        frame = self._scene.selected_camera.get_frame()
+        if (
+            frame.rgb is None
+            or self._scene.selected_camera.intrinsic_matrix is None
+            or self._scene.selected_camera.dist_coeffs is None
+        ):
+            return None
+
+        if frame.depth is None:
+            logging.error("Camera must have a depth channel")
+            return
 
         datapoint = Datapoint(
             rgb=frame.rgb,
@@ -59,6 +71,9 @@ class PoseRegistrator:
 
     def optimize_pose(self) -> None:
         obj = self._scene.selected_object
+        if obj is None:
+            logging.error("No object selected")
+            return
         obj.mesh.compute_vertex_normals()
         obj_points = obj.mesh.sample_points_poisson_disk(1000)
 
@@ -117,7 +132,7 @@ class PoseRegistrator:
         world2object = x.reshape((4, 4))
         logging.info(f"Result:\n{world2object}")
 
-        self._scene.selected_object.register_pose(world2object)
+        obj.register_pose(world2object)
 
     def move_pose(self, obj: LabelledObject, x, y, z, rho, phi, theta):
         obj.pose = get_affine_matrix_from_euler([rho, phi, theta], [x, y, z])
@@ -136,7 +151,7 @@ class PoseRegistrator:
             return rgb
 
         cam2obj = invert_homogeneous(cam_pose) @ obj.pose
-        rvec, _ = cv2.Rodrigues(cam2obj[:3, :3])
+        rvec, _ = cv2.Rodrigues(cam2obj[:3, :3])  # type: ignore
         tvec = cam2obj[:3, 3]
 
         if obj.name not in self.mesh_cache:
@@ -146,7 +161,7 @@ class PoseRegistrator:
         else:
             points = self.mesh_cache[obj.name]
 
-        projected_points, _ = cv2.projectPoints(
+        projected_points, _ = cv2.projectPoints(  # type: ignore
             points, rvec, tvec, cam_intrinsics, cam_dist_coeffs
         )
         projected_points = projected_points.astype(int)[:, 0, :]
@@ -168,12 +183,14 @@ class PoseRegistrator:
         projected_points = np.clip(projected_points, 0, np.array(rgb.shape[1::-1]) - 1)
 
         for point in projected_points:
-            cv2.circle(rgb, tuple(point), 4, obj.semantic_color, -1)
+            cv2.circle(rgb, tuple(point), 4, obj.semantic_color, -1)  # type: ignore
         return rgb
 
-    def _draw_tracking_arrow(self, rgb, rvec, tvec, cam_intrinsics, cam_dist_coeffs, color):
+    def _draw_tracking_arrow(
+        self, rgb: np.ndarray, rvec, tvec, cam_intrinsics, cam_dist_coeffs, color
+    ):
         centroid = np.array([0.0, 0.0, 0.0])
-        projected_center = cv2.projectPoints(
+        projected_center = cv2.projectPoints(  # type: ignore
             centroid, rvec, tvec, cam_intrinsics, cam_dist_coeffs
         )[0][0][0]
         # dist to image border
@@ -200,7 +217,7 @@ class PoseRegistrator:
             int(rgb.shape[1] / 2 + dir_vec[0] * length_2_img_border),
             int(rgb.shape[0] / 2 + dir_vec[1] * length_2_img_border),
         )
-        cv2.arrowedLine(rgb, arrow_start, arrow_end, color, arrow_thickness)
+        cv2.arrowedLine(rgb, arrow_start, arrow_end, color, arrow_thickness)  # type: ignore
 
     def _optimize_object_pose(self, world2object, world2camera, camera2object):
         def residual(world2object_, world2camera, camera2object):

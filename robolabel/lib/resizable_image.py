@@ -5,11 +5,11 @@ import cv2
 
 
 class ResizableImage(tk.Canvas):
-    def __init__(self, master, image=None, **kwargs):
+    def __init__(self, master, image=None, keep_aspect_ratio: bool = True, **kwargs):
         tk.Canvas.__init__(self, master, **kwargs)
         self._canvas_img = self.create_image(0, 0, anchor=tk.NW)
-        self._img_tk: ImageTk.PhotoImage = None
-        self._img: np.ndarray = None
+        self._img = None
+        self._keep_aspect_ratio = keep_aspect_ratio
         if image is not None:
             self._img = image.copy()
         self.bind("<Configure>", self._on_resize)
@@ -24,13 +24,17 @@ class ResizableImage(tk.Canvas):
 
         img_width = self._img.shape[1]
         img_height = self._img.shape[0]
-
-        scale = min(self.widget_width / img_width, self.widget_height / img_height)
-        scaled_img_width = int(img_width * scale)
-        scaled_img_height = int(img_height * scale)
-        img_resized = cv2.resize(
-            self._img.copy(), (scaled_img_width, scaled_img_height)
-        )
+        if self._keep_aspect_ratio:
+            scale = min(self.widget_width / img_width, self.widget_height / img_height)
+            scaled_img_width = int(img_width * scale)
+            scaled_img_height = int(img_height * scale)
+            img_resized = cv2.resize(  # type: ignore
+                self._img.copy(), (scaled_img_width, scaled_img_height)
+            )
+        else:
+            img_resized = cv2.resize(  # type: ignore
+                self._img.copy(), (self.widget_width, self.widget_height)
+            )
 
         self._img_tk = ImageTk.PhotoImage(Image.fromarray(img_resized))
         self.itemconfig(self._canvas_img, image=self._img_tk)  # , anchor=tk.CENTER)
