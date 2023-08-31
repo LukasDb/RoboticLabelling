@@ -99,8 +99,8 @@ class DemoCam(Camera):
             robot_pose = robot_pose @ invert_homogeneous(self._link_matrix)
 
         # update mock robot pose
-        if self.parent is not None:
-            self.parent.pose = robot_pose
+        if self.robot is not None:
+            self.robot.pose = robot_pose
         return CamFrame(rgb=img, depth=depth)
 
     @property

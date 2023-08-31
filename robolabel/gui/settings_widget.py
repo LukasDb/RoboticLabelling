@@ -6,8 +6,12 @@ import dataclasses
 class SettingsWidget(ttk.Frame):
     """Settings widget for arbitrary dataclasses"""
 
+    dataclass: type
+
     def __init__(self, master, dataclass, **kwargs) -> None:
-        super().__init__(master, **kwargs)
+        defaults = {"borderwidth": 2, "relief": tk.GROOVE}
+        defaults.update(kwargs)
+        super().__init__(master, **defaults)
 
         self.dataclass = dataclass
         self.fields: dict[str, dataclasses.Field] = dataclass.__dataclass_fields__
@@ -16,10 +20,15 @@ class SettingsWidget(ttk.Frame):
         if not hasattr(dataclass, "__dataclass_fields__"):
             raise ValueError("dataclass must be a dataclass")
 
+        pad = 10
+        self.max_columns = 2
+        title = ttk.Label(self, text=dataclass.__name__)
         for i, (name, field) in enumerate(self.fields.items()):
             label = ttk.Label(self, text=name)
-            label.grid(row=i, column=0, sticky=tk.EW)
-            self.vars[name] = self.create_entry_widget(self, i, 1, field.type)
+            label.grid(row=i + 1, column=0, sticky=tk.EW, padx=pad, pady=pad)
+            self.vars[name] = self.create_entry_widget(self, i + 1, 1, field.type)
+
+        title.grid(row=0, columnspan=self.max_columns, sticky=tk.EW)
 
     def create_entry_widget(self, master, row: int, column: int, dtype: type):
         if dtype is int:
@@ -33,6 +42,10 @@ class SettingsWidget(ttk.Frame):
         elif dtype is bool:
             var = tk.BooleanVar()
             widget = tk.Checkbutton(master, variable=var)
+        elif dtype is str:
+            var = tk.StringVar()
+            widget = ttk.Entry(master, textvariable=var)
+
         elif dtype.__origin__ is tuple:
             widget = ttk.Frame(master)
             var = []
@@ -42,13 +55,15 @@ class SettingsWidget(ttk.Frame):
         else:
             print(f"could not create widget for field {dtype}")
             return
-        widget.grid(row=row, column=column, sticky=tk.EW)
+        widget.grid(row=row, column=column, sticky=tk.EW, padx=10)
+        self.max_columns = max(self.max_columns, column + 1)
         return var
 
     def set_from_instance(self, dataclass_instance):
         """set widget states from dataclass instance"""
         for k, v in dataclasses.asdict(dataclass_instance).items():
             self._set_widget(k, v)
+        self.update()
 
     def _set_widget(self, name, value):
         var = self.vars[name]

@@ -1,7 +1,7 @@
 import open3d as o3d
-from typing import List, Tuple
 import logging
 from robolabel.labelled_object import LabelledObject
+from robolabel.camera import Camera
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 import itertools as it
@@ -10,12 +10,12 @@ from dataclasses import dataclass
 
 @dataclass
 class TrajectorySettings:
-    n_steps: int = 100  # number of steps in the trajectory
-    r_range: Tuple[float, float] = (0.4, 1.0)  # min and max distance from center of objects
+    n_steps: int = 20  # number of steps in the trajectory
+    r_range: tuple[float, float] = (0.4, 1.0)  # min and max distance from center of objects
     z_cutoff: float = 0.2  # minimum height above the objects
     reach_dist_cutoff: float = 0.4  # how much to reach "behind" the objects
-    min_robot_dist: float = 0.3  # minimum distance to the robot
-    view_jitter: float = 0.2  # how much to jitter the view direction in m as offset of the center
+    min_robot_dist: float = 0.5  # minimum distance to the robot
+    view_jitter: float = 0.1  # how much to jitter the view direction in m as offset of the center
 
 
 class TrajectoryGenerator:
@@ -23,7 +23,7 @@ class TrajectoryGenerator:
         self._current_trajectory = None
 
     def generate_trajectory(
-        self, active_objects: List[LabelledObject], settings: TrajectorySettings
+        self, active_objects: list[LabelledObject], settings: TrajectorySettings
     ):
         """generates a trajectory based on the selected objects.
         The points are generated in a hemisphere above the center of the objects.
@@ -76,7 +76,11 @@ class TrajectoryGenerator:
         # resort the positions to always go to the closest one
         arranged_positions = []
         candidates = list(range(len(positions)))
-        current_i = np.random.choice(np.arange(len(positions)))
+
+        # current_i = np.random.choice(np.arange(len(positions)))
+        # set start highest point
+        current_i = np.argmax(positions[:, 2])
+
         for _ in range(len(positions)):
             candidates.remove(current_i)
             current_pos = positions[current_i]
@@ -116,31 +120,49 @@ class TrajectoryGenerator:
         logging.info(f"Generated trajectory with {len(trajectory)} poses")
         self._current_trajectory = trajectory
 
-        # visualize the trajectory for debugging
-        poses = []
-        for t in trajectory:
-            pose = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)
-            pose.compute_vertex_normals()
-            pose.transform(t)
-            poses.append(pose)
+    def visualize_trajectory(self, camera: Camera, objects: list[LabelledObject]) -> None:
+        assert self._current_trajectory is not None, "No trajectory generated yet"
 
-        torus = o3d.geometry.TriangleMesh.create_torus(0.2, 0.05)
-        torus.compute_vertex_normals()
-        torus.translate(center)
+        frame = camera.get_frame()
+        assert frame.rgb is not None, "Camera has no RGB frame"
+
+        h, w = frame.rgb.shape[:2]
+
+        vis_views = []
+        for pose in self._current_trajectory:
+            # vis_view = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)
+            # generate a camera frustum
+            frustum = o3d.geometry.LineSet.create_camera_visualization(
+                w,
+                h,
+                camera.intrinsic_matrix,
+                np.eye(4),
+                0.05,
+            )
+            frustum.transform(pose)
+
+            vis_views.append(frustum)
 
         lines = o3d.geometry.LineSet()
-        lines.points = o3d.utility.Vector3dVector([t[:3, 3] for t in trajectory])
-        lines.lines = o3d.utility.Vector2iVector([[i, i + 1] for i in range(len(trajectory) - 1)])
+        lines.points = o3d.utility.Vector3dVector([t[:3, 3] for t in self._current_trajectory])
+        lines.lines = o3d.utility.Vector2iVector(
+            [[i, i + 1] for i in range(len(self._current_trajectory) - 1)]
+        )
         lines.colors = o3d.utility.Vector3dVector(
-            np.tile(np.array([1.0, 0.0, 0.0]), (len(trajectory), 1))
+            np.tile(np.array([1.0, 0.0, 0.0]), (len(self._current_trajectory), 1))
         )
 
         origin = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.5)
+        object_meshes = []
+        for obj in objects:
+            mesh = o3d.geometry.TriangleMesh(obj.mesh)
+            mesh.compute_vertex_normals()
+            mesh.paint_uniform_color(np.array(obj.semantic_color) / 255.0)
+            mesh.transform(obj.pose)
+            object_meshes.append(mesh)
 
-        o3d.visualization.draw_geometries([*poses, torus, lines, origin])
+        o3d.visualization.draw_geometries([*vis_views, lines, origin, *object_meshes])
 
-    def get_current_trajectory(self) -> None | List[np.ndarray]:
-        if self._current_trajectory is None:
-            logging.warning("No trajectory generated yet")
-            return None
+    def get_current_trajectory(self) -> None | list[np.ndarray]:
+        assert self._current_trajectory is not None, "No trajectory generated yet"
         return self._current_trajectory

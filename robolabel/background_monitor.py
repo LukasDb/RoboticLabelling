@@ -2,9 +2,20 @@ import numpy as np
 import tkinter as tk
 from .entity import Entity
 from PIL import Image, ImageTk
+import pathlib
 import cv2
 import logging
 from robolabel.lib.geometry import *
+from dataclasses import dataclass
+
+
+@dataclass
+class BackgroundSettings:
+    """Settings for the background monitor randomization"""
+
+    use_backgrounds: bool = True
+    n_steps: int = 5
+    backgrounds_path: str = "./backgrounds"
 
 
 class BackgroundMonitor(Entity):
@@ -28,6 +39,48 @@ class BackgroundMonitor(Entity):
         self.window.geometry("640x480")
         self.window.geometry("+0+0")
         self.setup_window(set_fullscreen=False)
+
+    def get_steps(self, settings: BackgroundSettings) -> list[dict]:
+        if not settings.use_backgrounds:
+            return [
+                {},
+            ]
+
+        bg_paths = np.random.choice(
+            list(pathlib.Path(settings.backgrounds_path).iterdir()), size=settings.n_steps
+        )
+
+        return [{"background": str(p)} for p in bg_paths]
+
+    def set_step(self, step: dict) -> None:
+        if "background" in step:
+            bg_path = pathlib.Path(step["background"])
+            logging.info(f"Setting background monitor to {bg_path.name}")
+            self._load_image_to_full_canvas(bg_path)
+
+    def set_textured(self):
+        # from https://dev.intelrealsense.com/docs/tuning-depth-cameras-for-best-performance
+        textured_folder = pathlib.Path("./intel_textured_patterns")
+        textured_paths = list(textured_folder.iterdir())
+        # choose the one that is closest to the current resolution
+        textured_widths = [int(p.name.split("_")[5]) - self.width for p in textured_paths]
+        selected = np.argmin(np.abs(textured_widths))
+        textured_path = textured_paths[selected]
+        logging.info(f"Setting background monitor to {textured_path.name}")
+        self._load_image_to_full_canvas(textured_path)
+
+    def _load_image_to_full_canvas(self, path: pathlib.Path):
+        with path.open("rb") as f:
+            bg = np.asarray(Image.open(f))
+        # scale image to fill the screen
+        bg = cv2.resize(
+            bg,
+            (
+                int(self.width),
+                int(self.height),
+            ),
+        )
+        self.set_image(bg)
 
     def setup_window(self, set_fullscreen=True):
         # get window size

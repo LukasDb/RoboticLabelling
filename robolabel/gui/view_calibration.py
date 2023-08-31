@@ -14,8 +14,8 @@ class ViewCalibration(ttk.Frame):
     PREVIEW_WIDTH = 640
     PREVIEW_HEIGHT = 480
 
-    def __init__(self, parent, scene: Scene, calibrator: CameraCalibrator) -> None:
-        ttk.Frame.__init__(self, parent)
+    def __init__(self, master, scene: Scene, calibrator: CameraCalibrator) -> None:
+        ttk.Frame.__init__(self, master)
         self.scene = scene
         self.calibrator = calibrator
 
@@ -32,8 +32,8 @@ class ViewCalibration(ttk.Frame):
         self.control_frame.grid(row=1, column=1, sticky=tk.NSEW)
         self.preview_frame.grid(row=1, column=0, sticky=tk.NSEW)
 
-    def setup_controls(self, parent):
-        control_frame = ttk.Frame(parent)
+    def setup_controls(self, master):
+        control_frame = ttk.Frame(master)
 
         self.btn_setup = ttk.Button(
             control_frame,

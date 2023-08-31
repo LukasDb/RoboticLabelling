@@ -9,8 +9,8 @@ from robolabel.operators import PoseRegistrator
 
 
 class ViewPoseRegistration(Observer, ttk.Frame):
-    def __init__(self, parent, scene: Scene, registrator: PoseRegistrator) -> None:
-        ttk.Frame.__init__(self, parent)
+    def __init__(self, master, scene: Scene, registrator: PoseRegistrator) -> None:
+        ttk.Frame.__init__(self, master)
         self.scene = scene
         self.listen_to(self.scene)
         self.registrator = registrator
@@ -40,8 +40,8 @@ class ViewPoseRegistration(Observer, ttk.Frame):
             self._update_gui_from_object_pose()
             self._preview_buffer()
 
-    def setup_controls(self, parent) -> ttk.Frame:
-        control_frame = ttk.Frame(parent)
+    def setup_controls(self, master) -> ttk.Frame:
+        control_frame = ttk.Frame(master)
 
         self.object_selection = ttk.Combobox(
             control_frame, values=[o.name for o in self.scene.objects.values()]
@@ -123,8 +123,8 @@ class ViewPoseRegistration(Observer, ttk.Frame):
 
         return control_frame
 
-    def setup_previews(self, parent):
-        preview_frame = ttk.Frame(parent)
+    def setup_previews(self, master):
+        preview_frame = ttk.Frame(master)
         preview_frame.columnconfigure(0, weight=1)
         preview_frame.columnconfigure(1, weight=1)
         preview_frame.rowconfigure(0, weight=1)

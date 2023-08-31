@@ -5,6 +5,7 @@ from .labelled_object import LabelledObject
 from .robot.robot import Robot
 from .camera.camera import Camera
 from .background_monitor import BackgroundMonitor
+from .lights_controller import LightsController
 
 
 class Scene(Observable):
@@ -14,7 +15,8 @@ class Scene(Observable):
         self.robots: Dict[str, Robot] = {}
         self.cameras: Dict[str, Camera] = {}
         self.background = BackgroundMonitor()
-        # TODO self.ligthing = LightController()
+        self.lights = LightsController()
+        # TODO self.lighting = LightController()
         self.selected_camera: Camera = None
         self.selected_object: LabelledObject = None
 

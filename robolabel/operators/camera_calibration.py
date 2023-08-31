@@ -48,9 +48,9 @@ class CameraCalibrator:
                 intrinsic_matrix = np.array(cal_data[c.unique_id]["intrinsic"])
                 dist_coeffs = np.array(cal_data[c.unique_id]["dist_coeffs"])
                 extrinsic_matrix = np.array(cal_data[c.unique_id]["extrinsic"])
-                parent = cal_data[c.unique_id]["attached_to"]
-                if parent != "none":
-                    c.attach(self._scene.robots[parent], extrinsic_matrix)
+                robot = cal_data[c.unique_id]["attached_to"]
+                if robot != "none":
+                    c.attach(self._scene.robots[robot], extrinsic_matrix)
                 c.set_calibration(intrinsic_matrix, dist_coeffs, extrinsic_matrix)
             except KeyError:
                 pass
@@ -67,7 +67,7 @@ class CameraCalibrator:
                 "intrinsic": c.intrinsic_matrix.tolist(),
                 "dist_coeffs": c.dist_coeffs.tolist(),
                 "extrinsic": c._link_matrix.tolist(),
-                "attached_to": "none" if c.parent is None else c.parent.name,
+                "attached_to": "none" if c.robot is None else c.robot.name,
             }
 
         cal_data.update({"background_pose": self._scene.background.pose.tolist()})
@@ -80,7 +80,7 @@ class CameraCalibrator:
 
     def capture_image(self):
         img = self._scene.selected_camera.get_frame().rgb
-        robot_pose = self._scene.selected_camera.parent.pose
+        robot_pose = self._scene.selected_camera.robot.pose
 
         if img is None:
             logging.error("No image captured")

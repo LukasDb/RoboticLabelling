@@ -9,29 +9,37 @@ import logging
 class FanucCRX10iAL(Robot):
     ROBOT_IP = "10.162.12.203"
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(name="crx")
 
     def move_to(self, pose: np.ndarray, block=True):
-        raise NotImplementedError("Implement move to for fanuc")
+        raise NotImplementedError("TODO: Implement move to for fanuc")
+
+    @threadsafe
+    def set_current_as_homepose(self) -> None:
+        pose = self._fetch_current_pose()
+        self.home_pose = pose
+        logging.info(f"Set robot {self.name}'s home pose to {pose[:3, 3]}")
 
     @property
     @threadsafe
     def pose(self) -> np.ndarray:
-        robot_http = "http://" + self.ROBOT_IP + "/KAREL/"
-        url = robot_http + "remoteposition"
-        try:
-            req = requests.get(url, timeout=1.0)
-        except requests.exceptions.Timeout:
-            logging.warn(f"Can not reach robot: {self.name}")
-            return super().pose
-        jdict = json.loads(req.text)
-        pose, _ = self.__parse_remote_position(jdict)
+        pose = self._fetch_current_pose()
         self._pose = pose
         return self._pose
 
+    def _fetch_current_pose(self):
+        robot_http = "http://" + self.ROBOT_IP + "/KAREL/"
+        url = robot_http + "remoteposition"
+
+        req = requests.get(url, timeout=1.0)
+
+        data = json.loads(req.text)
+        pose, _ = self.__parse_remote_position(data)
+        return pose
+
     @pose.setter
-    def pose(self, pose: np.ndarray):
+    def pose(self, pose: np.ndarray) -> None:
         logging.warn("Cant *set* pose for robot; use move_to instead")
 
     def __parse_remote_position(self, result):

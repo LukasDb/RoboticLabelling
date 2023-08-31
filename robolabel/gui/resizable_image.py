@@ -5,8 +5,8 @@ import cv2
 
 
 class ResizableImage(tk.Canvas):
-    def __init__(self, parent, image=None, **kwargs):
-        tk.Canvas.__init__(self, parent, **kwargs)
+    def __init__(self, master, image=None, **kwargs):
+        tk.Canvas.__init__(self, master, **kwargs)
         self._canvas_img = self.create_image(0, 0, anchor=tk.NW)
         self._img_tk: ImageTk.PhotoImage = None
         self._img: np.ndarray = None
