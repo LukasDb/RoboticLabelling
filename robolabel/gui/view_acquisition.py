@@ -9,7 +9,13 @@ from ..lib.settings_widget import SettingsWidget
 from robolabel.labelled_object import LabelledObject
 from robolabel.camera import Camera
 from robolabel.observer import Observable, Observer, Event
-from robolabel.operators import TrajectoryGenerator, TrajectorySettings, DatasetWriter, Acquisition
+from robolabel.operators import (
+    TrajectoryGenerator,
+    TrajectorySettings,
+    DatasetWriter,
+    WriterSettings,
+    Acquisition,
+)
 from robolabel.background_monitor import BackgroundSettings
 from robolabel.lights_controller import LightsSettings
 
@@ -41,25 +47,29 @@ class ViewAcquisition(tk.Frame, Observer):
         self.cam_list = WidgetList(self, column_names=["Cameras"], columns=[tk.Checkbutton])
         self.object_list = WidgetList(self, column_names=["Objects"], columns=[tk.Checkbutton])
         self.controls = ttk.Frame(self)
-        self.trajectory_settings = SettingsWidget(self, dataclass=TrajectorySettings)
-        self.trajectory_settings.set_from_instance(TrajectorySettings())
-        self.background_settings = SettingsWidget(self, dataclass=BackgroundSettings)
-        self.background_settings.set_from_instance(BackgroundSettings())
-        self.lights_settings = SettingsWidget(self, dataclass=LightsSettings)
-        self.lights_settings.set_from_instance(LightsSettings())
+        self.settings = ttk.Frame(self)
 
         padx = 10
         self.cam_list.grid(column=0, row=1, sticky=tk.NSEW, padx=padx)
         self.object_list.grid(column=1, row=1, sticky=tk.NSEW, padx=padx)
         self.controls.grid(column=2, row=1, sticky=tk.NSEW, padx=padx)
-        self.trajectory_settings.grid(column=3, row=1, sticky=tk.NSEW, padx=padx)
-        self.background_settings.grid(column=4, row=1, sticky=tk.NSEW, padx=padx)
-        self.lights_settings.grid(column=5, row=1, sticky=tk.NSEW, padx=padx)
+        self.settings.grid(column=3, row=1, sticky=tk.NSEW, padx=padx)
+
+        # -- settings --
+        self.trajectory_settings = SettingsWidget(self.settings, dataclass=TrajectorySettings)
+        self.background_settings = SettingsWidget(self.settings, dataclass=BackgroundSettings)
+        self.lights_settings = SettingsWidget(self.settings, dataclass=LightsSettings)
+        self.writer_settings = SettingsWidget(self.settings, dataclass=WriterSettings)
+
+        self.trajectory_settings.grid(column=0, row=1, sticky=tk.NSEW)
+        self.background_settings.grid(column=0, row=2, sticky=tk.NSEW)
+        self.lights_settings.grid(column=0, row=3, sticky=tk.NSEW)
+        self.writer_settings.grid(column=0, row=4, sticky=tk.NSEW)
 
         self.object_states = {}
         self.camera_states = {}
 
-        ## setup controls
+        # -- controls --
         self.generate_trajectory_button = ttk.Button(
             self.controls,
             text="1. Generate Trajectory",
@@ -143,6 +153,7 @@ class ViewAcquisition(tk.Frame, Observer):
 
     @ensure_free_robot
     def _start_acquisition(self) -> None:
+        self.writer.is_pre_acquisition = False
         self._run_acquisition()
 
     @ensure_free_robot
@@ -163,6 +174,7 @@ class ViewAcquisition(tk.Frame, Observer):
         lights_settings.use_lights = False
         self.lights_settings.set_from_instance(lights_settings)
 
+        self.writer.is_pre_acquisition = True
         self._run_acquisition()
 
         # restore previous settings
@@ -180,7 +192,7 @@ class ViewAcquisition(tk.Frame, Observer):
         writer = None
         if len(active_objects) > 0:
             writer = self.writer
-            writer.set_objects(active_objects)
+            writer.setup(active_objects, self.writer_settings.get_instance())
 
         trajectory = self.trajectory_generator.get_current_trajectory()
 

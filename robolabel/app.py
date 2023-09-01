@@ -197,7 +197,7 @@ class App:
             i = 1
             while f"{obj_name}_{i}" in self.scene.objects:
                 i += 1
-            obj_name = f"{obj_name}_{i}"
+            obj_name = f"{obj_name}.{i:03}"
         new_object = LabelledObject(obj_name, path)
         monitor_pose = self.scene.background.pose
         new_object.pose = monitor_pose  # add this as inital position

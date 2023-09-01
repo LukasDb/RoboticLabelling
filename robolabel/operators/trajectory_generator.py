@@ -2,6 +2,7 @@ import open3d as o3d
 import logging
 from robolabel.labelled_object import LabelledObject
 from robolabel.camera import Camera
+from robolabel.lib.geometry import invert_homogeneous
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 import itertools as it
@@ -123,10 +124,7 @@ class TrajectoryGenerator:
     def visualize_trajectory(self, camera: Camera, objects: list[LabelledObject]) -> None:
         assert self._current_trajectory is not None, "Generate trajectory first"
 
-        frame = camera.get_frame()
-        assert frame.rgb is not None, "Camera has no RGB frame"
-
-        h, w = frame.rgb.shape[:2]
+        w, h = camera.width, camera.height
 
         vis_views = []
         for pose in self._current_trajectory:
@@ -136,10 +134,9 @@ class TrajectoryGenerator:
                 w,
                 h,
                 camera.intrinsic_matrix,
-                np.eye(4),
+                invert_homogeneous(pose),
                 0.05,
             )
-            frustum.transform(pose)
 
             vis_views.append(frustum)
 

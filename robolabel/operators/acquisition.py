@@ -40,14 +40,6 @@ class Acquisition:
                     - write to dataset
         3. move to home pose
         """
-        self.cameras = cameras
-        self.trajectory = trajectory
-        self.writer = writer
-        self.bg_monitor = bg_monitor
-        self.bg_settings = bg_settings
-        self.lights_controller = lights_controller
-        self.lights_settings = lights_settings
-
         # check that all active cameras belong to the same robot
         if len(cameras) == 0:
             raise ValueError("No cameras selected")
@@ -61,7 +53,7 @@ class Acquisition:
 
         # check all cameras are calibrated
         for cam in cameras:
-            if not cam.is_calibrated:
+            if not cam.is_calibrated():
                 logging.error(f"Camera {cam.name} is not calibrated")
                 return
 
@@ -86,16 +78,24 @@ class Acquisition:
                     return
 
                 for bg_step, light_step in it.product(bg_steps, light_steps):
+                    # TODO this loop blocks the entire program!
+
                     if self._cancelled:
                         self._cancelled = False
                         return
                     bg_monitor.set_step(bg_step)
                     lights_controller.set_step(light_step)
 
-                    print("TAKING IMAGE")
-                    await asyncio.sleep(0.5)
+                    if writer is not None:
+                        try:
+                            writer.capture(cam)
+                        except Exception as e:
+                            logging.error(f"Error while capturing data for camera {cam.name}")
+                            logging.error(e)
+                            import traceback
 
-                    # TODO write data, pre acq,
+                            logging.error(traceback.format_exc())
+                            return
 
         if not await robot.move_to(robot.home_pose, timeout=10):
             logging.error("Failed to move robot to home pose")

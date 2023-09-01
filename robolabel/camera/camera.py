@@ -17,6 +17,9 @@ class CamFrame:
 
 
 class Camera(Entity, Observable, ABC):
+    width: int
+    height: int
+
     def __init__(self, name: str):
         Entity.__init__(self, name)
         Observable.__init__(self)

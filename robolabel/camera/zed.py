@@ -7,10 +7,8 @@ import logging
 
 
 class ZedCamera(Camera):
-    RGB_H = 1080
-    RGB_W = 1920
-    DEPTH_H = 1280
-    DEPTH_W = 720
+    width = 1920
+    height = 1080
 
     @staticmethod
     def get_available_devices() -> List["ZedCamera"]:
@@ -55,9 +53,16 @@ class ZedCamera(Camera):
 
         if self.device.grab() == sl.ERROR_CODE.SUCCESS:
             self.device.retrieve_image(self._rgb_buffer, sl.VIEW.LEFT)
-            output.rgb = cv2.cvtColor(self._rgb_buffer.get_data(deep_copy=True), cv2.COLOR_BGR2RGB) # type: ignore
+            output.rgb = cv2.cvtColor(self._rgb_buffer.get_data(deep_copy=True), cv2.COLOR_BGR2RGB)  # type: ignore
+
+            self.device.retrieve_image(self._rgb_buffer, sl.VIEW.RIGHT)
+            output.rgb_R = cv2.cvtColor(self._rgb_buffer.get_data(deep_copy=True), cv2.COLOR_BGR2RGB)  # type: ignore
+
             self.device.retrieve_measure(self._depth_buffer, sl.MEASURE.DEPTH)
             output.depth = self._depth_buffer.get_data(deep_copy=True)
+
+            self.device.retrieve_measure(self._depth_buffer, sl.MEASURE.DEPTH_RIGHT)
+            output.depth_R = self._depth_buffer.get_data(deep_copy=True)
 
         return output
 

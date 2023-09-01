@@ -7,8 +7,8 @@ import logging
 
 
 class Realsense(Camera):
-    RGB_H = 1080
-    RGB_W = 1920
+    height = 1080
+    width = 1920
     DEPTH_H = 720
     DEPTH_W = 1280
 
@@ -43,7 +43,7 @@ class Realsense(Camera):
         super().__init__(self.device.get_info(rs.camera_info.name))  # type: ignore
 
         config.enable_stream(rs.stream.depth, self.DEPTH_W, self.DEPTH_H, rs.format.z16, 30)  # type: ignore
-        config.enable_stream(rs.stream.color, self.RGB_W, self.RGB_H, rs.format.bgr8, 30)  # type: ignore
+        config.enable_stream(rs.stream.color, self.width, self.height, rs.format.bgr8, 30)  # type: ignore
         self.align_to_rgb = rs.align(rs.stream.color)  # type: ignore
 
         self.temporal_filter = rs.temporal_filter(  # type: ignore

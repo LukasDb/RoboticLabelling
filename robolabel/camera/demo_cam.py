@@ -27,11 +27,11 @@ class DemoCam(Camera):
         self.window.attributes("-type", "dialog")
 
         # selectbox
-        self.selectbox = ttk.Combobox(
-            self.window, values=list(str(x) for x in Path("demo_data").iterdir())
-        )
+        available_data = list(str(x) for x in Path("demo_data").iterdir())
+        self.selectbox = ttk.Combobox(self.window, values=available_data)
         self.selectbox.bind("<<ComboboxSelected>>", lambda _: self._on_data_selected())
         self.selectbox.grid(row=0, column=0, sticky=tk.NSEW)
+        self.selectbox.set(available_data[0])
 
         # checkbox to toggle play
         self.auto_play = False
@@ -52,6 +52,8 @@ class DemoCam(Camera):
         )
         self.slider.grid(row=2, column=0, sticky=tk.NSEW)
 
+        self._on_data_selected()
+
     def _on_slider_change(self, value):
         self.img_index = int(value)
 
@@ -67,6 +69,11 @@ class DemoCam(Camera):
         self.slider.configure(to=self.n_images - 1)
         self.slider.set(0)
 
+        frame = self.get_frame()
+        assert frame.rgb is not None
+        self.width = frame.rgb.shape[1]
+        self.height = frame.rgb.shape[0]
+
     def get_frame(self) -> CamFrame:
         if self.data_folder is None:
             return CamFrame()
@@ -80,8 +87,8 @@ class DemoCam(Camera):
 
         # img_path = next(self.img_paths)
         img_path = Path(f"{self.data_folder}/images/{self.img_index}.png")
-        img = cv2.imread(str(img_path)) # type: ignore
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) # type: ignore
+        img = cv2.imread(str(img_path))  # type: ignore
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # type: ignore
         depth = None
 
         try:

@@ -136,8 +136,6 @@ class Overview(Observer, tk.Frame):
         preview_frame.rowconfigure(0, weight=1)
         self.live_canvas = ResizableImage(preview_frame, bg="#000000")
         self.live_canvas.grid(sticky=tk.NSEW)
-        self.live_canvas2 = ResizableImage(preview_frame, bg="#000000")
-        self.live_canvas2.grid(sticky=tk.NSEW)
         return preview_frame
 
     def _on_capture(self):
@@ -260,7 +258,6 @@ class Overview(Observer, tk.Frame):
 
         if selected_cam is None:
             self.live_canvas.clear_image()
-            self.live_canvas2.clear_image()
             logging.debug("[preview] No camera selected")
             return
 
@@ -270,12 +267,9 @@ class Overview(Observer, tk.Frame):
             logging.error(f"Failed to get frame from camera: {e}")
             return
 
-        img = frame.rgb
-
-        if img is None:
-            self.live_canvas.clear_image()
-            logging.debug("[preview] No RGB image received")
-        else:
+        previews = []
+        if frame.rgb is not None:
+            img = frame.rgb.copy()
             if selected_cam.is_calibrated():
                 img = self._calibrator.draw_calibration(selected_cam, img)
                 img = self._registrator.draw_registered_objects(
@@ -297,16 +291,41 @@ class Overview(Observer, tk.Frame):
                 3,
                 cv2.LINE_AA,  # type: ignore
             )
-
-            self.live_canvas.set_image(img)
+            previews.append(img)
 
         if frame.depth is not None:
-            colored_depth = cv2.applyColorMap(  # type: ignore
-                cv2.convertScaleAbs(frame.depth, alpha=255 / 2.0), cv2.COLORMAP_JET  # type: ignore
-            )
-            self.live_canvas2.set_image(colored_depth)
+            colored_depth = self._color_depth(frame.depth)
+            previews.append(colored_depth)
+
+        if frame.rgb_R is not None:
+            previews.append(frame.rgb_R)
+
+        if frame.depth_R is not None:
+            colored_depth_R = self._color_depth(frame.depth_R)
+            previews.append(colored_depth_R)
+
+        if len(previews) == 0:
+            self.live_canvas.clear_image()
+            logging.debug("[preview] No images to show")
+            return
+
+        # assemble previews in grid
+        if len(previews) in [1, 2, 3]:
+            prev = np.vstack(previews)
+        elif len(previews) == 4:
+            prev = np.vstack([np.hstack(previews[:2]), np.hstack(previews[2:])])
         else:
-            self.live_canvas2.clear_image()
+            raise ValueError(f"Cannot show {len(previews)} previews")
+
+        self.live_canvas.set_image(prev)
+
+    def _color_depth(self, depth) -> np.ndarray:
+        return cv2.cvtColor(  # type: ignore
+            cv2.applyColorMap(  # type: ignore
+                cv2.convertScaleAbs(depth, alpha=255 / 2.0), cv2.COLORMAP_JET  # type: ignore
+            ),
+            cv2.COLOR_BGR2RGB,  # type: ignore
+        )
 
     def _on_object_color_click(self, obj: LabelledObject):
         colors = askcolor(title="Object Semantic Color")

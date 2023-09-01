@@ -6,3 +6,4 @@ demo_data/**
 meshes/**
 backgrounds
 *.config
+dataset

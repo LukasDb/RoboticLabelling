@@ -25,7 +25,7 @@ class SettingsWidget(ttk.Frame):
         title = ttk.Label(self, text=dataclass.__name__)
         for i, (name, field) in enumerate(self.fields.items()):
             label = ttk.Label(self, text=name)
-            label.grid(row=i + 1, column=0, sticky=tk.EW, padx=pad, pady=pad)
+            label.grid(row=i + 1, column=0, sticky=tk.EW, padx=pad, pady=5)
             self.vars[name] = self.create_entry_widget(self, i + 1, 1, field.type)
 
         for i in range(self.max_columns):
@@ -33,6 +33,8 @@ class SettingsWidget(ttk.Frame):
 
         # after we know max_columns
         title.grid(row=0, columnspan=self.max_columns, sticky=tk.EW)
+
+        self.set_from_instance(dataclass())  # set defaults
 
     def create_entry_widget(self, master, row: int, column: int, dtype: type):
         if dtype is int:
