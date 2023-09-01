@@ -51,6 +51,9 @@ class Overview(Observer, tk.Frame):
         self._update_cam_table()
         self._update_object_table()
         self.camera_selection.configure(values=[c.unique_id for c in self._scene.cameras.values()])
+        # listen to all cameras
+        for cam in self._scene.cameras.values():
+            self.listen_to(cam)
 
         self.t_previous = time.perf_counter()
         self.FPS = 20
@@ -169,19 +172,24 @@ class Overview(Observer, tk.Frame):
             np.save(str(data_folder / f"depth/{idx}.npy"), frame.depth)
 
     def _update_cam_table(self) -> None:
-        self.cam_list.clear()
-        for cam in self._scene.cameras.values():
-            is_calibrated = cam.intrinsic_matrix is not None
+        for i, cam in enumerate(self._scene.cameras.values()):
             kwargs_list = [
                 {"text": f"{cam.name} ({cam.unique_id})"},
                 {
-                    "text": "Yes" if is_calibrated else "No",
-                    "fg": "green" if is_calibrated else "red",
+                    "text": "Yes" if cam.is_calibrated() else "No",
+                    "fg": "green" if cam.is_calibrated() else "red",
                 },
                 {"values": ["-"] + list(self._scene.robots.keys())},
             ]
 
-            _, _, w_robot = self.cam_list.add_new_row(kwargs_list)
+            try:
+                row_widgets = self.cam_list.rows[i]
+                for w, kwargs in zip(row_widgets, kwargs_list):
+                    w.configure(**kwargs)
+            except IndexError:
+                row_widgets = self.cam_list.add_new_row(kwargs_list)
+
+            w_robot: ttk.Combobox = row_widgets[2]  # type: ignore
             w_robot.bind(
                 "<<ComboboxSelected>>",
                 lambda event, cam_unique_id=cam.unique_id, robot=w_robot: self._on_attach_cam(
@@ -190,11 +198,12 @@ class Overview(Observer, tk.Frame):
             )
 
             w_robot.set("-" if cam.robot is None else cam.robot.name)
+        # remove the rest of the rows
+        for i in range(len(self._scene.cameras), len(self.cam_list.rows)):
+            self.cam_list.pop(i)
 
     def _update_object_table(self) -> None:
-        self.object_list.clear()
-
-        for obj in self._scene.objects.values():
+        for i, obj in enumerate(self._scene.objects.values()):
             kwargs_list = [
                 {"text": obj.name},  # obj_name
                 {
@@ -204,20 +213,32 @@ class Overview(Observer, tk.Frame):
                 {"bg": "#%02x%02x%02x" % tuple(obj.semantic_color)},  # w_color
                 {"text": "x", "command": lambda obj=obj: self._scene.remove_object(obj)},
             ]
-            _, _, w_color, _ = self.object_list.add_new_row(kwargs_list)
+            try:
+                row_widgets = self.object_list.rows[i]
+                for w, kwargs in zip(row_widgets, kwargs_list):
+                    w.configure(**kwargs)
+            except IndexError:
+                row_widgets = self.object_list.add_new_row(kwargs_list)
+
+            _, _, w_color, _ = row_widgets
+
             w_color.bind(
                 "<Button-1>",
                 lambda _: self._on_object_color_click(obj),
             )
+        # remove the rest of the rows
+        for i in range(len(self._scene.objects), len(self.object_list.rows)):
+            self.object_list.pop(i)
 
     def _on_attach_cam(self, cam_unique_id, w_robot):
+        cam = self._scene.cameras[cam_unique_id]
+
         if w_robot.get() == "-":
-            self._scene.cameras[cam_unique_id].detach()
+            cam.detach()
         else:
             robot = self._scene.robots[w_robot.get()]
-            link_mat = self._scene.cameras[cam_unique_id].extrinsic_matrix
-            link_mat = link_mat if link_mat is not None else np.eye(4)
-            self._scene.cameras[cam_unique_id].attach(robot, link_mat)
+            link_mat = cam.extrinsic_matrix if cam.is_calibrated() else np.eye(4)
+            cam.attach(robot, link_mat)
 
     def _on_camera_selection_change(self, _):
         selected = self.camera_selection.get()
@@ -240,6 +261,7 @@ class Overview(Observer, tk.Frame):
         if selected_cam is None:
             self.live_canvas.clear_image()
             self.live_canvas2.clear_image()
+            logging.debug("[preview] No camera selected")
             return
 
         try:
@@ -252,6 +274,7 @@ class Overview(Observer, tk.Frame):
 
         if img is None:
             self.live_canvas.clear_image()
+            logging.debug("[preview] No RGB image received")
         else:
             img = self._calibrator.draw_calibration(img)
             img = self._registrator.draw_registered_objects(

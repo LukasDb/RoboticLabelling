@@ -70,15 +70,15 @@ class CameraCalibrator(Observer):
     def dump(self) -> Dict:
         """dump calibration as config dict"""
         cal_data = {}
-        for c in self._scene.cameras.values():
-            if c.intrinsic_matrix is None or c.dist_coeffs is None or c.extrinsic_matrix is None:
+        for cam in self._scene.cameras.values():
+            if not cam.is_calibrated():
                 continue
 
-            cal_data[c.unique_id] = {
-                "intrinsic": c.intrinsic_matrix.tolist(),
-                "dist_coeffs": c.dist_coeffs.tolist(),
-                "extrinsic": c.extrinsic_matrix.tolist(),
-                "attached_to": "none" if c.robot is None else c.robot.name,
+            cal_data[cam.unique_id] = {
+                "intrinsic": cam.intrinsic_matrix.tolist(),
+                "dist_coeffs": cam.dist_coeffs.tolist(),
+                "extrinsic": cam.extrinsic_matrix.tolist(),
+                "attached_to": "none" if cam.robot is None else cam.robot.name,
             }
 
         cal_data.update({"background_pose": self._scene.background.pose.tolist()})
@@ -256,7 +256,7 @@ class CameraCalibrator(Observer):
         if cam is None:
             return rgb
 
-        if cam.intrinsic_matrix is not None:
+        if cam.is_calibrated():
             cam2monitor = invert_homogeneous(cam.pose) @ monitor.pose
             monitor.draw_on_rgb(
                 rgb,
@@ -278,7 +278,7 @@ class CameraCalibrator(Observer):
 
         img = self.captured_images[index].copy()
 
-        if cam.intrinsic_matrix is None:
+        if not cam.is_calibrated():
             return img
 
         # draw optimized calibration result

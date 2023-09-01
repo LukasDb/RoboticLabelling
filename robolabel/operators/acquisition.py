@@ -59,12 +59,20 @@ class Acquisition:
             logging.error("Cameras must be attached to a a robot")
             return
 
+        # check all cameras are calibrated
+        for cam in cameras:
+            if not cam.is_calibrated:
+                logging.error(f"Camera {cam.name} is not calibrated")
+                return
+
         robot: Robot = cameras[0].robot
 
         if robot.home_pose is None:
             raise ValueError("Robot home pose is not set")
 
-        await robot.move_to(robot.home_pose)
+        if not await robot.move_to(robot.home_pose, timeout=30):
+            logging.error("Failed to move robot to home pose")
+            return
 
         for pose in trajectory:
             # generate randomized bg and lights settings, to be re-used for all cameras
@@ -73,7 +81,9 @@ class Acquisition:
 
             for cam in cameras:
                 robot_target = pose @ invert_homogeneous(cam.extrinsic_matrix)
-                await robot.move_to(robot_target)
+                if not await robot.move_to(robot_target, timeout=10):
+                    logging.error("Failed to move robot to target pose")
+                    return
 
                 for bg_step, light_step in it.product(bg_steps, light_steps):
                     if self._cancelled:
@@ -87,4 +97,6 @@ class Acquisition:
 
                     # TODO write data, pre acq,
 
-        await robot.move_to(robot.home_pose)
+        if not await robot.move_to(robot.home_pose, timeout=10):
+            logging.error("Failed to move robot to home pose")
+            return

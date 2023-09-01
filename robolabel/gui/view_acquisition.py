@@ -174,6 +174,8 @@ class ViewAcquisition(tk.Frame, Observer):
     def _run_acquisition(
         self,
     ) -> None:
+        logging.info("Starting acquisition...")
+
         active_objects = self._active_objects()
         writer = None
         if len(active_objects) > 0:

@@ -48,11 +48,7 @@ class PoseRegistrator:
         self._scene.background.set_textured()  # easier to detect -> less noise
 
         frame = self._scene.selected_camera.get_frame()
-        if (
-            frame.rgb is None
-            or self._scene.selected_camera.intrinsic_matrix is None
-            or self._scene.selected_camera.dist_coeffs is None
-        ):
+        if frame.rgb is None or not self._scene.selected_camera.is_calibrated():
             return None
 
         if frame.depth is None:

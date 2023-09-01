@@ -43,6 +43,7 @@ class Camera(Entity, Observable, ABC):
     def detach(self):
         self.robot = None
         self._extrinsics = None
+        self.notify(Event.CAMERA_CALIBRATED)
 
     @abstractproperty
     def unique_id(self) -> str:
@@ -51,15 +52,25 @@ class Camera(Entity, Observable, ABC):
 
     @property
     def intrinsic_matrix(self):
+        assert self._intrinsics is not None
         return self._intrinsics
 
     @property
     def extrinsic_matrix(self):
+        assert self._extrinsics is not None
         return self._extrinsics
 
     @property
     def dist_coeffs(self):
+        assert self._dist_coeffs is not None
         return self._dist_coeffs
+
+    def is_calibrated(self):
+        return (
+            self._intrinsics is not None
+            and self._dist_coeffs is not None
+            and self._extrinsics is not None
+        )
 
     def set_calibration(
         self,

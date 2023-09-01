@@ -10,6 +10,7 @@ import time
 
 # TODO: Test move to
 
+
 class FanucCRX10iAL(Robot):
     ROBOT_IP = "10.162.12.203"
 
@@ -116,7 +117,7 @@ class FanucCRX10iAL(Robot):
     def __mat_to_fanuc_6d(self, mat):
         pose6d = np.zeros((6,))
         pose6d[:3] = mat[:3, 3]
-        pose6d[3:] = mat.from_matrix(mat[:3, :3]).as_euler("xyz")
+        pose6d[3:] = R.from_matrix(mat[:3, :3]).as_euler("xyz")
         pose6d[:3] = pose6d[:3] * 1000
         pose6d[3:] = pose6d[3:] / np.pi * 180
         return pose6d
