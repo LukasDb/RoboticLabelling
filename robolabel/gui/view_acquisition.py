@@ -14,20 +14,15 @@ from robolabel.background_monitor import BackgroundSettings
 from robolabel.lights_controller import LightsSettings
 
 
-"""
-Layout:
-1st column: list to choose cameras
-2nd column: list to choose objects
-3rd column: controls
+def ensure_free_robot(func):
+    def wrapper(self, *args, **kwargs):
+        # check if 'acquisition' task is running
+        if any(t.get_name() == "acquisition" for t in asyncio.all_tasks()):
+            logging.error("Acquisition is already running")
+            return
+        return func(self, *args, **kwargs)
 
-controls:
-    - checkbox: use backgrounds monitor + field to enter path to backgrounds
-    - checkbox: use lighting randomization
-    - button: generate trajectory: based on selected objects
-    - button: start acquisition of HQ depth (with scanning spray)
-    - button: start acquisition of Real depth and RGB (after evaporating)
-
-"""
+    return wrapper
 
 
 class ViewAcquisition(tk.Frame, Observer):
@@ -132,6 +127,7 @@ class ViewAcquisition(tk.Frame, Observer):
             self.trajectory_settings.get_instance(),
         )
 
+    @ensure_free_robot
     def _dry_run(self) -> None:
         # set all objects as inactive
         previous_states = {}
@@ -145,11 +141,13 @@ class ViewAcquisition(tk.Frame, Observer):
             for name, state in previous_states.items():
                 self.object_states[name].set(state)
 
+    @ensure_free_robot
     def _start_acquisition(self) -> None:
         self._run_acquisition()
 
+    @ensure_free_robot
     def _start_pre_acquisition(self) -> None:
-        # TODO change to pre-acquisition mode
+        # TODO change writer to pre-acquisition mode
 
         self.scene.background.set_textured()
         # turn off background randomization
@@ -196,7 +194,8 @@ class ViewAcquisition(tk.Frame, Observer):
                 bg_settings=self.background_settings.get_instance(),
                 lights_controller=lights_controller,
                 lights_settings=self.lights_settings.get_instance(),
-            )
+            ),
+            name="acquisition",
         )
 
     def update_observer(self, subject: Observable, event: Event, *args, **kwargs) -> None:

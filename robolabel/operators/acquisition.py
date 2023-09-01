@@ -15,7 +15,6 @@ import itertools as it
 
 class Acquisition:
     def __init__(self) -> None:
-        self.acq_thread = None
         self._cancelled = False
 
     def cancel(self) -> None:

@@ -16,7 +16,6 @@ class Scene(Observable):
         self.cameras: Dict[str, Camera] = {}
         self.background = BackgroundMonitor()
         self.lights = LightsController()
-        # TODO self.lighting = LightController()
         self.selected_camera: Camera | None = None
         self.selected_object: LabelledObject | None = None
 

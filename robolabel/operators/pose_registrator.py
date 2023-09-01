@@ -32,7 +32,6 @@ class PoseRegistrator:
     # handles the initial object pose registration
     def __init__(self, scene: Scene) -> None:
         super().__init__()
-        # TODO set background monitor so some 'easy' background
         # TODO set lighting to standard lighting
         self._scene = scene
         self.mesh_cache = {}
@@ -45,6 +44,8 @@ class PoseRegistrator:
         if self._scene.selected_camera is None:
             logging.error("No camera selected")
             return None
+
+        self._scene.background.set_textured()  # easier to detect -> less noise
 
         frame = self._scene.selected_camera.get_frame()
         if (

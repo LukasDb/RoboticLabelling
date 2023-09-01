@@ -1,8 +1,7 @@
 import logging
 import coloredlogs
 
-coloredlogs.install()
-logging.basicConfig(format="%(asctime)s %(levelname)s %(message)s", level=logging.DEBUG)
+coloredlogs.install(level=logging.INFO, fmt="%(asctime)s %(levelname)s %(message)s")
 
 from robolabel.app import App
 

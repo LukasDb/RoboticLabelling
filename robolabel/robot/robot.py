@@ -15,6 +15,6 @@ class Robot(Entity, ABC):
         pass
 
     @abstractmethod
-    async def move_to(self, pose: np.ndarray) -> None:
-        """move to a pose"""
+    async def move_to(self, pose: np.ndarray) -> bool:
+        """move to a pose, return True if successful"""
         pass

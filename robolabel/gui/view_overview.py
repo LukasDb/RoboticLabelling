@@ -224,11 +224,14 @@ class Overview(Observer, tk.Frame):
         self._scene.select_camera_by_id(selected)
 
     async def live_preview(self):
+        self.t_previous_frame = time.perf_counter()
         while True:
+            # framerate limiter
             t = time.perf_counter()
             if (t - self.t_previous) < 1 / self.FPS:  # 30 FPS
                 await asyncio.sleep(1 / self.FPS - (t - self.t_previous))
             self.t_previous = time.perf_counter()
+
             self.show_single_frame()
 
     def show_single_frame(self):
@@ -237,33 +240,49 @@ class Overview(Observer, tk.Frame):
         if selected_cam is None:
             self.live_canvas.clear_image()
             self.live_canvas2.clear_image()
-        else:
+            return
+
+        try:
             frame = selected_cam.get_frame()
-            img = frame.rgb
+        except Exception as e:
+            logging.error(f"Failed to get frame from camera: {e}")
+            return
 
-            if img is None:
-                self.live_canvas.clear_image()
-            else:
-                img = self._calibrator.draw_calibration(img)
-                img = self._registrator.draw_registered_objects(
-                    img,
-                    selected_cam.pose,
-                    selected_cam.intrinsic_matrix,
-                    selected_cam.dist_coeffs,
-                )
+        img = frame.rgb
 
-                self.live_canvas.set_image(img)
+        if img is None:
+            self.live_canvas.clear_image()
+        else:
+            img = self._calibrator.draw_calibration(img)
+            img = self._registrator.draw_registered_objects(
+                img,
+                selected_cam.pose,
+                selected_cam.intrinsic_matrix,
+                selected_cam.dist_coeffs,
+            )
+            # draw FPS in top left cornere
+            fps = 1 / (time.perf_counter() - self.t_previous_frame)
+            self.t_previous_frame = time.perf_counter()
+            cv2.putText(  # type: ignore
+                img,
+                f"{fps:.1f} FPS",
+                (10, 80),
+                cv2.FONT_HERSHEY_SIMPLEX,  # type: ignore
+                2,
+                (0, 255, 0),  # draws on RGB image!
+                3,
+                cv2.LINE_AA,  # type: ignore
+            )
 
-            if frame.depth is not None:
-                colored_depth = cv2.applyColorMap(  # type: ignore
-                    cv2.convertScaleAbs(frame.depth, alpha=255 / 2.0), cv2.COLORMAP_JET  # type: ignore
-                )
-                self.live_canvas2.set_image(colored_depth)
-            else:
-                self.live_canvas2.clear_image()
+            self.live_canvas.set_image(img)
 
-            if frame.rgb_R is not None:
-                self.live_canvas2.set_image(frame.rgb_R)
+        if frame.depth is not None:
+            colored_depth = cv2.applyColorMap(  # type: ignore
+                cv2.convertScaleAbs(frame.depth, alpha=255 / 2.0), cv2.COLORMAP_JET  # type: ignore
+            )
+            self.live_canvas2.set_image(colored_depth)
+        else:
+            self.live_canvas2.clear_image()
 
     def _on_object_color_click(self, obj: LabelledObject):
         colors = askcolor(title="Object Semantic Color")

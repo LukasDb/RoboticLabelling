@@ -31,7 +31,7 @@ class BackgroundMonitor(Entity):
         self.window.title("Background Monitor -> MOVE THIS WINDOW TO SECONDARY MONITOR")
 
         # create fullscreen canvas
-        self.canvas = ResizableImage(self.window, keep_aspect_ratio=False)
+        self.canvas = ResizableImage(self.window, mode="zoom")
         self.canvas.pack(fill=tk.BOTH, expand=True)
 
         # move window to second screen
@@ -55,7 +55,7 @@ class BackgroundMonitor(Entity):
     def set_step(self, step: dict) -> None:
         if "background" in step:
             bg_path = pathlib.Path(step["background"])
-            logging.info(f"Setting background monitor to {bg_path.name}")
+            logging.debug(f"Setting background monitor to {bg_path.name}")
             self._load_image_to_full_canvas(bg_path)
 
     def set_textured(self):
@@ -66,7 +66,6 @@ class BackgroundMonitor(Entity):
         textured_widths = [int(p.name.split("_")[5]) - self.width for p in textured_paths]
         selected = np.argmin(np.abs(textured_widths))
         textured_path = textured_paths[selected]
-        logging.info(f"Setting background monitor to {textured_path.name}")
         self._load_image_to_full_canvas(textured_path)
 
     def _load_image_to_full_canvas(self, path: pathlib.Path) -> None:
