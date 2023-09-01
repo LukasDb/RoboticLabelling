@@ -28,6 +28,10 @@ class SettingsWidget(ttk.Frame):
             label.grid(row=i + 1, column=0, sticky=tk.EW, padx=pad, pady=pad)
             self.vars[name] = self.create_entry_widget(self, i + 1, 1, field.type)
 
+        for i in range(self.max_columns):
+            self.columnconfigure(i, weight=1)
+
+        # after we know max_columns
         title.grid(row=0, columnspan=self.max_columns, sticky=tk.EW)
 
     def create_entry_widget(self, master, row: int, column: int, dtype: type):
@@ -55,8 +59,8 @@ class SettingsWidget(ttk.Frame):
 
         else:
             raise ValueError(f"Unsupported type {dtype}")
-        
-        widget.grid(row=row, column=column, sticky=tk.EW, padx=10)
+
+        widget.grid(row=row, column=column, sticky=tk.EW, padx=2)
         self.max_columns = max(self.max_columns, column + 1)
         return var
 

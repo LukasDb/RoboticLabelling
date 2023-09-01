@@ -276,13 +276,14 @@ class Overview(Observer, tk.Frame):
             self.live_canvas.clear_image()
             logging.debug("[preview] No RGB image received")
         else:
-            img = self._calibrator.draw_calibration(img)
-            img = self._registrator.draw_registered_objects(
-                img,
-                selected_cam.pose,
-                selected_cam.intrinsic_matrix,
-                selected_cam.dist_coeffs,
-            )
+            if selected_cam.is_calibrated():
+                img = self._calibrator.draw_calibration(selected_cam, img)
+                img = self._registrator.draw_registered_objects(
+                    img,
+                    selected_cam.pose,
+                    selected_cam.intrinsic_matrix,
+                    selected_cam.dist_coeffs,
+                )
             # draw FPS in top left cornere
             fps = 1 / (time.perf_counter() - self.t_previous_frame)
             self.t_previous_frame = time.perf_counter()

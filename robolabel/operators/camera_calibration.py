@@ -250,20 +250,16 @@ class CameraCalibrator(Observer):
         # set camera atttributes
         self.camera.set_calibration(camera_matrix, dist_coeffs, extrinsic_matrix)
 
-    def draw_calibration(self, rgb: np.ndarray) -> np.ndarray:
+    def draw_calibration(self, cam: Camera, rgb: np.ndarray) -> np.ndarray:
         monitor = self._scene.background
-        cam = self.camera
-        if cam is None:
-            return rgb
 
-        if cam.is_calibrated():
-            cam2monitor = invert_homogeneous(cam.pose) @ monitor.pose
-            monitor.draw_on_rgb(
-                rgb,
-                cam.intrinsic_matrix,
-                cam.dist_coeffs,
-                cam2monitor,
-            )
+        cam2monitor = invert_homogeneous(cam.pose) @ monitor.pose
+        monitor.draw_on_rgb(
+            rgb,
+            cam.intrinsic_matrix,
+            cam.dist_coeffs,
+            cam2monitor,
+        )
 
         return rgb
 

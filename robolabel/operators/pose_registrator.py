@@ -144,9 +144,7 @@ class PoseRegistrator:
     def draw_registered_object(
         self, obj: LabelledObject, rgb, cam_pose, cam_intrinsics, cam_dist_coeffs
     ):
-        if cam_intrinsics is None:
-            return rgb
-
+    
         cam2obj = invert_homogeneous(cam_pose) @ obj.pose
         rvec, _ = cv2.Rodrigues(cam2obj[:3, :3])  # type: ignore
         tvec = cam2obj[:3, 3]

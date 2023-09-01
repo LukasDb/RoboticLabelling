@@ -82,7 +82,7 @@ class ViewAcquisition(tk.Frame, Observer):
 
         self.pre_label = ttk.Label(
             self.controls,
-            text="2. Prepare Pre-Acquisition: Spray the scene with scanning spray.",
+            text="2. Prepare Pre-Acquisition",
         )
 
         self.start_pre_acquisition = ttk.Button(
@@ -93,7 +93,7 @@ class ViewAcquisition(tk.Frame, Observer):
 
         self.after_pre_label = ttk.Label(
             self.controls,
-            text="4. After Pre-Acquisition: Wait for evaporation of the scanning spray.",
+            text="4. After Pre-Acquisition",
         )
 
         self.start_acquisition = ttk.Button(
