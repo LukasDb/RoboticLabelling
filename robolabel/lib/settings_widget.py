@@ -22,6 +22,7 @@ class SettingsWidget(ttk.Frame):
         self.vars: dict[str, tk.Variable | tuple] = {}
 
         self.fields = {k: v for k, v in self.fields.items() if not k.startswith("_")}
+        self._private_vars: dict = {}
 
         pad = 10
         self.max_columns = 2
@@ -72,14 +73,14 @@ class SettingsWidget(ttk.Frame):
     def set_from_instance(self, dataclass_instance):
         """set widget states from dataclass instance"""
         for k, v in dataclasses.asdict(dataclass_instance).items():
-            self._set_widget(k, v)
+            if k.startswith("_"):
+                self._private_vars[k] = v
+            else:
+                self._set_widget(k, v)
         self.update()
 
     def _set_widget(self, name, value):
-        try:
-            var = self.vars[name]
-        except KeyError:
-            return
+        var = self.vars[name]
 
         if isinstance(var, tuple) or isinstance(var, list):
             for _var, v in zip(var, value):
@@ -89,7 +90,9 @@ class SettingsWidget(ttk.Frame):
 
     def get_instance(self):
         """get dataclass instance from widget states"""
-        return self.dataclass(**{k.name: self._get_widget(k) for k in self.fields.values()})
+        return self.dataclass(
+            **{k.name: self._get_widget(k) for k in self.fields.values()}, **self._private_vars
+        )
 
     def _get_widget(self, field: dataclasses.Field):
         var = self.vars[field.name]

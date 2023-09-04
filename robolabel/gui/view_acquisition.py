@@ -146,19 +146,17 @@ class ViewAcquisition(tk.Frame, Observer):
 
     @ensure_free_robot
     def _start_acquisition(self) -> None:
-        with self.overwrite_settings(self.w_writer_settings, {"is_pre_acquisition": False}):
+        with self.overwrite_settings(self.w_writer_settings, {"_is_pre_acquisition": False}):
             self._run_acquisition()
 
     @ensure_free_robot
     def _start_pre_acquisition(self) -> None:
-        # TODO change writer to pre-acquisition mode
-
         self.scene.background.set_textured()
 
         with (
             self.overwrite_settings(self.w_background_settings, {"use_backgrounds": False}),
             self.overwrite_settings(self.w_lights_settings, {"use_lights": False}),
-            self.overwrite_settings(self.w_writer_settings, {"is_pre_acquisition": True}),
+            self.overwrite_settings(self.w_writer_settings, {"_is_pre_acquisition": True}),
         ):
             self._run_acquisition()
 
@@ -226,6 +224,8 @@ class ViewAcquisition(tk.Frame, Observer):
         old_settings = copy.deepcopy(settings)
 
         for k, v in overwrite.items():
+            if not hasattr(settings, k):
+                raise ValueError(f"Trying to overwrite unknown setting: {k}")
             setattr(settings, k, v)
 
         w_settings.set_from_instance(settings)
