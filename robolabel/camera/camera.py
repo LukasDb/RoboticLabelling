@@ -6,6 +6,7 @@ from ..robot import Robot
 from dataclasses import dataclass
 import numpy as np
 from typing import Dict
+from enum import Enum, auto
 
 
 @dataclass
@@ -14,6 +15,19 @@ class CamFrame:
     rgb_R: np.ndarray | None = None
     depth: np.ndarray | None = None
     depth_R: np.ndarray | None = None
+
+
+class DepthQuality(Enum):
+    """Depth quality for the camera.
+    INFERENCE should be used when the camera is used in production and for inference (fast, practical).
+    GT should be used when the camera is used for ground truth generation (highest quality).
+    FASTEST should be used when the camera is set to the fastest possible settings (probably lowest quality).
+    """
+
+    INFERENCE = auto()
+    GT = auto()
+    FASTEST = auto()
+    UNCHANGED = auto()
 
 
 class Camera(Entity, Observable, ABC):
@@ -88,5 +102,5 @@ class Camera(Entity, Observable, ABC):
         self.notify(Event.CAMERA_CALIBRATED)
 
     @abstractmethod
-    def get_frame(self) -> CamFrame:
+    def get_frame(self, depth_quality: DepthQuality) -> CamFrame:
         pass

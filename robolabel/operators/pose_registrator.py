@@ -15,8 +15,7 @@ from robolabel.lib.geometry import (
     invert_homogeneous,
     get_affine_matrix_from_euler,
 )
-
-import time
+from robolabel.camera import DepthQuality
 
 
 @dataclass
@@ -47,7 +46,8 @@ class PoseRegistrator:
 
         self._scene.background.set_textured()  # easier to detect -> less noise
 
-        frame = self._scene.selected_camera.get_frame()
+        # best settings
+        frame = self._scene.selected_camera.get_frame(depth_quality=DepthQuality.GT)
         if frame.rgb is None or not self._scene.selected_camera.is_calibrated():
             return None
 
@@ -144,7 +144,6 @@ class PoseRegistrator:
     def draw_registered_object(
         self, obj: LabelledObject, rgb, cam_pose, cam_intrinsics, cam_dist_coeffs
     ):
-    
         cam2obj = invert_homogeneous(cam_pose) @ obj.pose
         rvec, _ = cv2.Rodrigues(cam2obj[:3, :3])  # type: ignore
         tvec = cam2obj[:3, 3]

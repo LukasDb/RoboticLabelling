@@ -1,4 +1,4 @@
-from .camera import Camera, CamFrame
+from .camera import Camera, CamFrame, DepthQuality
 import numpy as np
 from typing import List
 import cv2
@@ -48,7 +48,9 @@ class ZedCamera(Camera):
         self._rgb_buffer = sl.Mat()
         self._depth_buffer = sl.Mat()
 
-    def get_frame(self) -> CamFrame:
+    def get_frame(self, depth_quality: DepthQuality) -> CamFrame:
+        # TODO update depth quality
+
         output = CamFrame()
 
         if self.device.grab() == sl.ERROR_CODE.SUCCESS:

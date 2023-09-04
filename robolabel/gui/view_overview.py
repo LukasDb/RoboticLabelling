@@ -11,6 +11,7 @@ import cv2
 
 from robolabel.scene import Scene
 from robolabel.labelled_object import LabelledObject
+from robolabel.camera import DepthQuality
 from robolabel.observer import Observer, Event
 from ..lib.resizable_image import ResizableImage
 from ..lib.widget_list import WidgetList
@@ -158,7 +159,7 @@ class Overview(Observer, tk.Frame):
             return
         idx = len(list(data_folder.glob("images/*.png")))
 
-        frame = cam.get_frame()
+        frame = cam.get_frame(depth_quality=DepthQuality.INFERENCE)
         if cam.robot is not None:
             robot_pose = cam.robot.pose
             np.savetxt(str(data_folder / f"poses/{idx}.txt"), robot_pose)
@@ -262,7 +263,8 @@ class Overview(Observer, tk.Frame):
             return
 
         try:
-            frame = selected_cam.get_frame()
+            # don't change otherwise running a task will trigger constant switching
+            frame = selected_cam.get_frame(depth_quality=DepthQuality.UNCHANGED)
         except Exception as e:
             logging.error(f"Failed to get frame from camera: {e}")
             return

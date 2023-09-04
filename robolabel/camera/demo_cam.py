@@ -1,12 +1,14 @@
-from .camera import Camera, CamFrame
+from .camera import Camera, CamFrame, DepthQuality
 import numpy as np
+import asyncio
+import logging
 import cv2
 from pathlib import Path
 from itertools import cycle
 import time
 import tkinter as tk
 from tkinter import ttk
-from robolabel.lib.geometry import invert_homogeneous
+from robolabel.lib.geometry import invert_homogeneous, distance_from_matrices
 
 
 class DemoCam(Camera):
@@ -69,12 +71,17 @@ class DemoCam(Camera):
         self.slider.configure(to=self.n_images - 1)
         self.slider.set(0)
 
-        frame = self.get_frame()
+        self.robot_poses = {
+            int(pose_path.stem): np.loadtxt(str(pose_path))
+            for pose_path in Path(f"{self.data_folder}/poses/").glob("*.txt")
+        }
+
+        frame = self.get_frame(depth_quality=DepthQuality.INFERENCE)
         assert frame.rgb is not None
         self.width = frame.rgb.shape[1]
         self.height = frame.rgb.shape[0]
 
-    def get_frame(self) -> CamFrame:
+    def get_frame(self, depth_quality: DepthQuality) -> CamFrame:
         if self.data_folder is None:
             return CamFrame()
 
@@ -96,8 +103,7 @@ class DemoCam(Camera):
         except Exception as e:
             pass
 
-        pose_path = Path(f"{self.data_folder}/poses/{self.img_index}.txt")
-        robot_pose = np.loadtxt(str(pose_path))
+        robot_pose = self.robot_poses[self.img_index]
 
         if "Intel RealSense D415_0" in self.data_folder and self._extrinsics is not None:
             # accidentally saved camera pose instead of robot pose
@@ -106,6 +112,19 @@ class DemoCam(Camera):
         # update mock robot pose
         if self.robot is not None:
             self.robot.pose = robot_pose
+
+            # whenever we move the robot, take a new image
+            async def move_to_with_cb(pose, timeout):
+                dists = {distance_from_matrices(pose, p): i for i, p in self.robot_poses.items()}
+                min_dist = np.min(list(dists.keys()))
+                closest = dists[min_dist]
+                self.img_index = closest
+                self.slider.set(closest)
+                await asyncio.sleep(0.5)
+                logging.info(f"{self.name} would moved to pose: {pose[:3, 3]}")
+                return True
+
+            self.robot.move_to = move_to_with_cb
         return CamFrame(rgb=img, depth=depth)
 
     @property

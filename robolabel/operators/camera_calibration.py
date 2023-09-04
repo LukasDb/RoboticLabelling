@@ -6,7 +6,7 @@ from typing import List, Dict
 from robolabel.scene import Scene
 from robolabel.lib.geometry import invert_homogeneous, get_affine_matrix_from_6d_vector
 from robolabel.observer import Event, Observable, Observer
-from robolabel.camera import Camera
+from robolabel.camera import Camera, DepthQuality
 import cv2
 from tqdm import tqdm
 from cv2 import aruco  # type: ignore
@@ -93,7 +93,12 @@ class CameraCalibrator(Observer):
         if self.camera is None:
             logging.error("No camera selected")
             return
-        img = self.camera.get_frame().rgb
+
+        # since the depth is not used anyway
+        frame = self.camera.get_frame(depth_quality=DepthQuality.FASTEST)
+        assert frame.rgb is not None, "No image captured"
+        img = frame.rgb
+
         if self.camera.robot is None:
             logging.error("Camera is not attached to a robot")
             return

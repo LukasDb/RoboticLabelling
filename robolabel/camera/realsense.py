@@ -1,4 +1,4 @@
-from .camera import Camera, CamFrame
+from .camera import Camera, CamFrame, DepthQuality
 import numpy as np
 from typing import List
 import cv2
@@ -70,7 +70,9 @@ class Realsense(Camera):
             logging.error(f"Could not start camera stream ({self.name})")
             logging.error(e)
 
-    def get_frame(self) -> CamFrame:
+    def get_frame(self, depth_quality: DepthQuality) -> CamFrame:
+        # TODO update depth quality
+
         output = CamFrame()
         if not self.is_started:
             return output
