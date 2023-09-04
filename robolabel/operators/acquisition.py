@@ -66,7 +66,7 @@ class Acquisition:
         robot: Robot = cameras[0].robot
 
         logging.debug(
-            f"Executing trajectory with:\ncameras: {cameras}\nObjects{objects}\n{writer_settings}\n{bg_settings}\n{lights_settings}"
+            f"Executing trajectory with:\n\t- {cameras}\n\t- {objects}\n\t- {writer_settings}\n\t- {bg_settings}\n\t- {lights_settings}"
         )
 
         if robot.home_pose is None:
@@ -76,7 +76,7 @@ class Acquisition:
             logging.error("Failed to move robot to home pose")
             return
 
-        for pose in trajectory:
+        for idx_trajectory, pose in enumerate(trajectory):
             # generate randomized bg and lights settings, to be re-used for all cameras
             bg_steps = bg_monitor.get_steps(bg_settings)
             light_steps = lights_controller.get_steps(lights_settings)
@@ -88,8 +88,6 @@ class Acquisition:
                     return
 
                 for bg_step, light_step in it.product(bg_steps, light_steps):
-                    # TODO this loop blocks the entire program!
-
                     bg_monitor.set_step(bg_step)
                     lights_controller.set_step(light_step)
 
@@ -101,7 +99,7 @@ class Acquisition:
 
                     if writer_settings.use_writer:
                         try:
-                            writer.capture(cam)
+                            writer.capture(cam, idx_trajectory)
                         except Exception as e:
                             logging.error(f"Error while capturing data for camera {cam.name}")
                             logging.error(e)
