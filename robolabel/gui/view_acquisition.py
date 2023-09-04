@@ -18,6 +18,8 @@ from robolabel.operators import (
 )
 from robolabel.background_monitor import BackgroundSettings
 from robolabel.lights_controller import LightsSettings
+from contextlib import contextmanager
+import copy
 
 
 def ensure_free_robot(func):
@@ -56,15 +58,15 @@ class ViewAcquisition(tk.Frame, Observer):
         self.settings.grid(column=3, row=1, sticky=tk.NSEW, padx=padx)
 
         # -- settings --
-        self.trajectory_settings = SettingsWidget(self.settings, dataclass=TrajectorySettings)
-        self.background_settings = SettingsWidget(self.settings, dataclass=BackgroundSettings)
-        self.lights_settings = SettingsWidget(self.settings, dataclass=LightsSettings)
-        self.writer_settings = SettingsWidget(self.settings, dataclass=WriterSettings)
+        self.w_trajectory_settings = SettingsWidget(self.settings, dataclass=TrajectorySettings)
+        self.w_background_settings = SettingsWidget(self.settings, dataclass=BackgroundSettings)
+        self.w_lights_settings = SettingsWidget(self.settings, dataclass=LightsSettings)
+        self.w_writer_settings = SettingsWidget(self.settings, dataclass=WriterSettings)
 
-        self.trajectory_settings.grid(column=0, row=1, sticky=tk.NSEW)
-        self.background_settings.grid(column=0, row=2, sticky=tk.NSEW)
-        self.lights_settings.grid(column=0, row=3, sticky=tk.NSEW)
-        self.writer_settings.grid(column=0, row=4, sticky=tk.NSEW)
+        self.w_trajectory_settings.grid(column=0, row=1, sticky=tk.NSEW)
+        self.w_background_settings.grid(column=0, row=2, sticky=tk.NSEW)
+        self.w_lights_settings.grid(column=0, row=3, sticky=tk.NSEW)
+        self.w_writer_settings.grid(column=0, row=4, sticky=tk.NSEW)
 
         self.object_states = {}
         self.camera_states = {}
@@ -134,80 +136,54 @@ class ViewAcquisition(tk.Frame, Observer):
     def _generate_trajectory(self) -> None:
         self.trajectory_generator.generate_trajectory(
             self._active_objects(),
-            self.trajectory_settings.get_instance(),
+            self.w_trajectory_settings.get_instance(),
         )
 
     @ensure_free_robot
     def _dry_run(self) -> None:
-        # set all objects as inactive
-        previous_states = {}
-        for name, state in self.object_states.items():
-            previous_states[name] = state.get()
-            state.set(False)
-        try:
+        with self.overwrite_settings(self.w_writer_settings, {"use_writer": False}):
             self._run_acquisition()
-        finally:
-            # restore previous states
-            for name, state in previous_states.items():
-                self.object_states[name].set(state)
 
     @ensure_free_robot
     def _start_acquisition(self) -> None:
-        self.writer.is_pre_acquisition = False
-        self._run_acquisition()
+        with self.overwrite_settings(self.w_writer_settings, {"is_pre_acquisition": False}):
+            self._run_acquisition()
 
     @ensure_free_robot
     def _start_pre_acquisition(self) -> None:
         # TODO change writer to pre-acquisition mode
 
         self.scene.background.set_textured()
-        # turn off background randomization
-        bg_settings: BackgroundSettings = self.background_settings.get_instance()
-        prev_bg_state = bg_settings.use_backgrounds
-        bg_settings.use_backgrounds = False
-        self.background_settings.set_from_instance(bg_settings)
 
-        # TODO change lighting to pre-acquisition lighting
-        # self.scene.lights.set_pre_acquisition()
-        lights_settings: LightsSettings = self.lights_settings.get_instance()
-        prev_lights_state = lights_settings.use_lights
-        lights_settings.use_lights = False
-        self.lights_settings.set_from_instance(lights_settings)
-
-        self.writer.is_pre_acquisition = True
-        self._run_acquisition()
-
-        # restore previous settings
-        bg_settings.use_backgrounds = prev_bg_state
-        self.background_settings.set_from_instance(bg_settings)
-        lights_settings.use_lights = prev_lights_state
-        self.lights_settings.set_from_instance(lights_settings)
+        with (
+            self.overwrite_settings(self.w_background_settings, {"use_backgrounds": False}),
+            self.overwrite_settings(self.w_lights_settings, {"use_lights": False}),
+            self.overwrite_settings(self.w_writer_settings, {"is_pre_acquisition": True}),
+        ):
+            self._run_acquisition()
 
     def _run_acquisition(
         self,
     ) -> None:
         logging.info("Starting acquisition...")
 
-        active_objects = self._active_objects()
-        writer = None
-        if len(active_objects) > 0:
-            writer = self.writer
-            writer.setup(active_objects, self.writer_settings.get_instance())
-
         trajectory = self.trajectory_generator.get_current_trajectory()
 
         bg_monitor = self.scene.background
         lights_controller = self.scene.lights
+        writer = self.writer
 
         asyncio.get_event_loop().create_task(
             self.acquisition.execute(
                 self._active_cameras(),
+                self._active_objects(),
                 trajectory,
                 writer=writer,
+                writer_settings=self.w_writer_settings.get_instance(),
                 bg_monitor=bg_monitor,
-                bg_settings=self.background_settings.get_instance(),
+                bg_settings=self.w_background_settings.get_instance(),
                 lights_controller=lights_controller,
-                lights_settings=self.lights_settings.get_instance(),
+                lights_settings=self.w_lights_settings.get_instance(),
             ),
             name="acquisition",
         )
@@ -243,3 +219,17 @@ class ViewAcquisition(tk.Frame, Observer):
 
     def _active_objects(self) -> list[LabelledObject]:
         return [o for o in self.scene.objects.values() if self.object_states[o.name].get()]
+
+    @contextmanager
+    def overwrite_settings(self, w_settings: SettingsWidget, overwrite: dict):
+        settings = w_settings.get_instance()
+        old_settings = copy.deepcopy(settings)
+
+        for k, v in overwrite.items():
+            setattr(settings, k, v)
+
+        w_settings.set_from_instance(settings)
+        try:
+            yield
+        finally:
+            w_settings.set_from_instance(old_settings)

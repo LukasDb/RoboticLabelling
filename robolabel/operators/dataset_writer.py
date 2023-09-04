@@ -5,15 +5,14 @@ import numpy as np
 import signal
 import logging
 from pathlib import Path
-from dataclasses import dataclass
 from PIL import Image
-import OpenEXR as exr
-import Imath
-import array
+from dataclasses import dataclass
+
 
 from ..labelled_object import LabelledObject
 from ..camera import Camera
 from robolabel.lib.geometry import invert_homogeneous
+from robolabel.lib.exr import write_exr
 
 
 class DelayedKeyboardInterrupt:
@@ -35,7 +34,9 @@ class DelayedKeyboardInterrupt:
 
 @dataclass
 class WriterSettings:
+    use_writer: bool = True
     output_dir: str = "dataset"
+    _is_pre_acquisition: bool = False
 
 
 class DatasetWriter:
@@ -85,42 +86,22 @@ class DatasetWriter:
         rgb = Image.fromarray(frame.rgb)
         rgb.save(self._rgb_dir / f"rgb_{dataset_index:04}.png")
 
-        # write to exr
-        header = exr.Header(
-            frame.depth.shape[1],
-            frame.depth.shape[0],
+        write_exr(
+            self._depth_dir / f"depth_{dataset_index:04}.exr",
+            {"R": frame.depth.astype(np.float16)},
         )
-        header["compression"] = Imath.Compression(Imath.Compression.NO_COMPRESSION)
-        header["channels"] = {"R": Imath.Channel(Imath.PixelType(Imath.PixelType.FLOAT))}
-
-        exr_file = exr.OutputFile(str(self._depth_dir / f"depth_{dataset_index:04}.exr"), header)
-        try:
-            exr_file.writePixels({"R": frame.depth.astype(np.float32).tobytes()})
-        finally:
-            exr_file.close()
 
         masks: dict[str, np.ndarray] = {}
         visib_mask = np.zeros((cam.height, cam.width), dtype=np.uint8)
         for object_id, obj in enumerate(self._active_objects, start=1):
             unoccluded_mask = self._render_object_mask(obj, cam)
-            masks[f"{object_id:04}.R"] = unoccluded_mask
+            masks[f"{object_id:04}.R"] = unoccluded_mask.astype(np.float16)
             occluded_mask = self._calculate_occluded_mask(unoccluded_mask, obj, frame.depth)
             visib_mask[occluded_mask == 1] = object_id
 
-        masks["visib.R"] = visib_mask
+        masks["visib.R"] = visib_mask.astype(np.float16)
 
-        # write to exr
-        header = exr.Header(visib_mask.shape[1], visib_mask.shape[0])
-        header["compression"] = Imath.Compression(Imath.Compression.NO_COMPRESSION)
-        header["channels"] = {
-            k: Imath.Channel(Imath.PixelType(Imath.PixelType.HALF)) for k in masks.keys()
-        }
-
-        exr_file = exr.OutputFile(str(self._mask_dir / f"mask_{dataset_index:04}.exr"), header)
-        try:
-            exr_file.writePixels({k: v.astype(np.float16).tobytes() for k, v in masks.items()})
-        finally:
-            exr_file.close()
+        write_exr(self._mask_dir / f"mask_{dataset_index:04}.exr", masks)
 
         obj_list = []
         for object_id, obj in enumerate(self._active_objects, start=1):

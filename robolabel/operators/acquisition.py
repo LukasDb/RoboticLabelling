@@ -6,9 +6,10 @@ import tkinter as tk
 
 from robolabel.camera import Camera
 from robolabel.robot import Robot
+from robolabel.labelled_object import LabelledObject
 from robolabel.background_monitor import BackgroundMonitor, BackgroundSettings
 from robolabel.lights_controller import LightsController, LightsSettings
-from .dataset_writer import DatasetWriter
+from .dataset_writer import DatasetWriter, WriterSettings
 from robolabel.lib.geometry import invert_homogeneous
 import itertools as it
 
@@ -23,8 +24,10 @@ class Acquisition:
     async def execute(
         self,
         cameras: list[Camera],
+        objects: list[LabelledObject],
         trajectory: list[np.ndarray],
-        writer: DatasetWriter | None,
+        writer: DatasetWriter,
+        writer_settings: WriterSettings,
         bg_monitor: BackgroundMonitor,
         bg_settings: BackgroundSettings,
         lights_controller: LightsController,
@@ -57,7 +60,14 @@ class Acquisition:
                 logging.error(f"Camera {cam.name} is not calibrated")
                 return
 
+        # setup writer
+        writer.setup(objects, writer_settings)
+
         robot: Robot = cameras[0].robot
+
+        logging.debug(
+            f"Executing trajectory with:\ncameras: {cameras}\nObjects{objects}\n{writer_settings}\n{bg_settings}\n{lights_settings}"
+        )
 
         if robot.home_pose is None:
             raise ValueError("Robot home pose is not set")
@@ -80,13 +90,16 @@ class Acquisition:
                 for bg_step, light_step in it.product(bg_steps, light_steps):
                     # TODO this loop blocks the entire program!
 
-                    if self._cancelled:
-                        self._cancelled = False
-                        return
                     bg_monitor.set_step(bg_step)
                     lights_controller.set_step(light_step)
 
-                    if writer is not None:
+                    # wait for background, lights and camera to settle
+                    await asyncio.sleep(0.2)
+                    if self._cancelled:
+                        self._cancelled = False
+                        return
+
+                    if writer_settings.use_writer:
                         try:
                             writer.capture(cam)
                         except Exception as e:

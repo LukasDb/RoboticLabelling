@@ -14,11 +14,14 @@ class SettingsWidget(ttk.Frame):
         super().__init__(master, **defaults)
 
         self.dataclass = dataclass
+        assert hasattr(
+            dataclass, "__dataclass_fields__"
+        ), f"To create Settings for {dataclass}, it must be a dataclass"
+
         self.fields: dict[str, dataclasses.Field] = dataclass.__dataclass_fields__
         self.vars: dict[str, tk.Variable | tuple] = {}
 
-        if not hasattr(dataclass, "__dataclass_fields__"):
-            raise ValueError("dataclass must be a dataclass")
+        self.fields = {k: v for k, v in self.fields.items() if not k.startswith("_")}
 
         pad = 10
         self.max_columns = 2
@@ -73,7 +76,11 @@ class SettingsWidget(ttk.Frame):
         self.update()
 
     def _set_widget(self, name, value):
-        var = self.vars[name]
+        try:
+            var = self.vars[name]
+        except KeyError:
+            return
+
         if isinstance(var, tuple) or isinstance(var, list):
             for _var, v in zip(var, value):
                 _var.set(v)

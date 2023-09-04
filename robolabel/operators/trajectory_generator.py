@@ -4,9 +4,8 @@ from robolabel.labelled_object import LabelledObject
 from robolabel.camera import Camera
 from robolabel.lib.geometry import invert_homogeneous
 import numpy as np
-from scipy.spatial.transform import Rotation as R
-import itertools as it
 from dataclasses import dataclass
+from scipy.spatial.transform import Rotation as R
 
 
 @dataclass

@@ -6,8 +6,8 @@ import pathlib
 import cv2
 import logging
 from robolabel.lib.geometry import *
-from dataclasses import dataclass
 from robolabel.lib.resizable_image import ResizableImage
+from dataclasses import dataclass
 
 
 @dataclass

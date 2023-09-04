@@ -28,3 +28,9 @@ class LabelledObject(Observable, Entity):
     @property
     def mesh(self):
         return self._mesh
+
+    def __str__(self):
+        return f"LabelledObject({self.name})"
+
+    def __repr__(self):
+        return f"LabelledObject({self.name})"

@@ -1,11 +1,9 @@
 from dataclasses import dataclass
 import logging
 
-
 @dataclass
 class LightsSettings:
     """settings for ambient lighting"""
-
     use_lights: bool = False
     n_steps: int = 3
 
