@@ -24,8 +24,8 @@ class Realsense(Camera):
         return cams
 
     def __init__(self, serial_number):
-        self.is_hq_depth = True
         self._serial_number = serial_number
+        self._depth_quality = DepthQuality.INFERENCE
 
         self._pipeline = rs.pipeline()  # type: ignore
         self._config = config = rs.config()  # type: ignore
@@ -71,7 +71,9 @@ class Realsense(Camera):
             logging.error(e)
 
     def get_frame(self, depth_quality: DepthQuality) -> CamFrame:
-        # TODO update depth quality
+        if depth_quality != DepthQuality.UNCHANGED and depth_quality != self._depth_quality:
+            self._depth_quality = depth_quality
+            # TODO set camera parameters
 
         output = CamFrame()
         if not self.is_started:
@@ -86,7 +88,7 @@ class Realsense(Camera):
             logging.warn("Could not get camera frame")
             return output
 
-        if self.is_hq_depth:
+        if self._depth_quality in [DepthQuality.INFERENCE, DepthQuality.GT]:
             depth_frame = self.temporal_filter.process(depth_frame)
             depth_frame = self.spatial_filter.process(depth_frame)
 
@@ -101,11 +103,3 @@ class Realsense(Camera):
     @property
     def unique_id(self) -> str:
         return "realsense_" + str(self._serial_number)
-
-    def _set_hq_depth(self):
-        self.is_hq_depth = True
-        # TODO possibly change other parameters, too
-
-    def _set_lq_depth(self):
-        self.is_hq_depth = False
-        # TODO possibly change other parameters, too
