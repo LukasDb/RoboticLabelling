@@ -1,4 +1,4 @@
-from typing import List, Dict
+from typing import Literal
 
 from .observer import Observable, Event
 from .labelled_object import LabelledObject
@@ -11,13 +11,15 @@ from .lights_controller import LightsController
 class Scene(Observable):
     def __init__(self) -> None:
         Observable.__init__(self)
-        self.objects: Dict[str, LabelledObject] = {}
-        self.robots: Dict[str, Robot] = {}
-        self.cameras: Dict[str, Camera] = {}
+        self.objects: dict[str, LabelledObject] = {}
+        self.robots: dict[str, Robot] = {}
+        self.cameras: dict[str, Camera] = {}
         self.background = BackgroundMonitor()
         self.lights = LightsController()
         self.selected_camera: Camera | None = None
         self.selected_object: LabelledObject | None = None
+
+        self.mode: Literal["acquisition", "calibration", "registration"] = "calibration"
 
     def add_camera(self, camera: Camera):
         self.cameras.update({camera.unique_id: camera})
@@ -41,6 +43,10 @@ class Scene(Observable):
 
     def select_object_by_name(self, name):
         self.selected_object = self.objects[name]
+
+    def change_mode(self, mode: Literal["acquisition", "calibration", "registration"]):
+        self.mode = mode
+        self.notify(Event.MODE_CHANGED, mode=mode)
 
     def __str__(self) -> str:
         return f"Scene"

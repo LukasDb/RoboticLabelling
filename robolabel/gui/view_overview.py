@@ -272,14 +272,16 @@ class Overview(Observer, tk.Frame):
         previews = []
         if frame.rgb is not None:
             img = frame.rgb.copy()
-            if selected_cam.is_calibrated():
-                img = self._calibrator.draw_calibration(selected_cam, img)
-                img = self._registrator.draw_registered_objects(
-                    img,
-                    selected_cam.pose,
-                    selected_cam.intrinsic_matrix,
-                    selected_cam.dist_coeffs,
-                )
+
+            img = self._calibrator.draw_on_preview(selected_cam, img)
+
+            img = self._registrator.draw_on_preview(
+                img,
+                selected_cam.pose,
+                selected_cam.intrinsic_matrix,
+                selected_cam.dist_coeffs,
+            )
+
             # draw FPS in top left cornere
             fps = 1 / (time.perf_counter() - self.t_previous_frame)
             self.t_previous_frame = time.perf_counter()

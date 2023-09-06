@@ -12,6 +12,7 @@ class Event(Enum):
     OBJECT_REGISTERED = auto()
     OBJECT_REMOVED = auto()
     ROBOT_ADDED = auto()
+    MODE_CHANGED = auto()
 
 
 class Observable:

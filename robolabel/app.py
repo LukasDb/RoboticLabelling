@@ -82,18 +82,31 @@ class App:
         self.root.rowconfigure(0, weight=1)
         self.root.rowconfigure(1, weight=1)
         self.overview = Overview(self.root, self.scene, self.calibrator, self.pose_registrator)
-        tabs = ttk.Notebook(self.root)
+        self.tabs = ttk.Notebook(self.root)
         self.overview.grid(sticky=tk.NSEW, pady=10)
-        tabs.grid(sticky=tk.NSEW, pady=10)
+        self.tabs.grid(sticky=tk.NSEW, pady=10)
 
-        self.cal = ViewCalibration(tabs, self.scene, self.calibrator)
-        tabs.add(self.cal, text="1. Camera Calibration")
+        self.cal = ViewCalibration(self.tabs, self.scene, self.calibrator)
+        self.tabs.add(self.cal, text="1. Camera Calibration")
 
-        reg = ViewPoseRegistration(tabs, self.scene, self.pose_registrator)
-        tabs.add(reg, text="2. Pose Registration")
+        reg = ViewPoseRegistration(self.tabs, self.scene, self.pose_registrator)
+        self.tabs.add(reg, text="2. Pose Registration")
 
-        acq = ViewAcquisition(tabs, self.scene)
-        tabs.add(acq, text="3. Acquisition")
+        self.acquisition = ViewAcquisition(self.tabs, self.scene)
+        self.tabs.add(self.acquisition, text="3. Acquisition")
+
+        # register callback on tab change
+        self.tabs.bind(sequence="<<NotebookTabChanged>>", func=lambda _: self._on_tab_change())
+        self._on_tab_change()
+
+    def _on_tab_change(self):
+        open_tab = self.tabs.select()
+        if "viewposeregistration" in open_tab:
+            self.scene.change_mode("registration")
+        elif "viewcalibration" in open_tab:
+            self.scene.change_mode("calibration")
+        elif "viewacquisition" in open_tab:
+            self.scene.change_mode("acquisition")
 
     def _on_close(self):
         logging.warning("Closing app...")

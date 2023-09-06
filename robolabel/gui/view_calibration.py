@@ -44,7 +44,13 @@ class ViewCalibration(ttk.Frame):
         )
 
         self.capture_button = ttk.Button(
-            control_frame, text="Capture Image", command=self.on_capture
+            control_frame, text="Capture Image", command=self.capture_image
+        )
+
+        self.automatic_button = ttk.Button(
+            control_frame,
+            text="Run automatic acquisition",
+            command=self.on_automatic_acquisition,
         )
 
         self.clear_button = ttk.Button(
@@ -55,13 +61,13 @@ class ViewCalibration(ttk.Frame):
 
         self.image_selection = ttk.Combobox(control_frame)
         self.image_selection.bind(
-            sequence="<<ComboboxSelected>>", func=lambda _: self.update_selected_image_preview()
+            sequence="<<ComboboxSelected>>", func=lambda _: self._update_gui()
         )
 
         self.calibrate_button = ttk.Button(
             control_frame,
             text="Calibrate Intrinsics & Hand-Eye",
-            command=self.on_calibrate,
+            command=self.calibrator.calibrate,
         )
 
         def sb_pos() -> ttk.Spinbox:
@@ -89,6 +95,7 @@ class ViewCalibration(ttk.Frame):
         pady = 5
         self.btn_setup.grid(pady=pady)
         self.capture_button.grid(pady=pady)
+        self.automatic_button.grid(pady=pady)
         self.clear_button.grid(pady=pady)
         self.image_selection.grid(pady=pady)
         self.guess_x.grid(pady=pady)
@@ -106,33 +113,33 @@ class ViewCalibration(ttk.Frame):
         self.selected_image_canvas.grid(sticky=tk.NSEW)
         return preview_frame
 
-    def update_selected_image_preview(self):
+    def _update_gui(self, set_to_last_image=False):
+        if len(self.calibrator.calibration_datapoints) == 0:
+            return
+        self.image_selection["values"] = [
+            f"Image {i:2}" for i in range(len(self.calibrator.calibration_datapoints))
+        ]
+        if set_to_last_image:
+            self.image_selection.set(self.image_selection["values"][-1])
+
         selected = self.image_selection.get()
         try:
             selected_index = int(selected.split(" ")[-1])
         except ValueError:
             return
 
-        img = self.calibrator.get_selected_img(selected_index)
+        img = self.calibrator.get_from_image_cache(selected_index)
         if img is not None:
             self.selected_image_canvas.set_image(img)
 
-    def on_capture(self):
-        def update_previews():
-            if len(self.calibrator.captured_images) == 0:
-                return
-            self.image_selection["values"] = [
-                f"Image {i:2}" for i in range(len(self.calibrator.captured_images))
-            ]
-            self.image_selection.set(self.image_selection["values"][-1])
+    def capture_image(self):
+        self.calibrator.capture()
+        self._update_gui(set_to_last_image=True)
 
-            self.update_selected_image_preview()
-
-        asyncio.get_event_loop().create_task(self.calibrator.capture_images(update_previews))
-
-    def on_calibrate(self):
-        self.calibrator.calibrate()
-        self.update_selected_image_preview()
+    def on_automatic_acquisition(self):
+        asyncio.get_event_loop().create_task(
+            self.calibrator.capture_images(lambda: self._update_gui(set_to_last_image=True))
+        )
 
     def on_delete(self):
         self.calibrator.reset()

@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from scipy import optimize
 import logging
 
+from robolabel.observer import Event, Observable, Observer
 from robolabel.scene import Scene
 from robolabel.labelled_object import LabelledObject
 from robolabel.lib.geometry import (
@@ -27,14 +28,23 @@ class Datapoint:
     dist_coeffs: np.ndarray
 
 
-class PoseRegistrator:
+class PoseRegistrator(Observer):
     # handles the initial object pose registration
     def __init__(self, scene: Scene) -> None:
         super().__init__()
         # TODO set lighting to standard lighting
         self._scene = scene
+        self.is_active = False
         self.mesh_cache = {}
         self.datapoints: List[Datapoint] = []
+
+    def update_observer(self, subject: Observable, event: Event, *args, **kwargs):
+        if event == Event.MODE_CHANGED:
+            if kwargs["mode"] == "registration":
+                self.reset()
+                self.is_active = True
+            else:
+                self.is_active = False
 
     def reset(self) -> None:
         self.datapoints.clear()
@@ -134,7 +144,10 @@ class PoseRegistrator:
     def move_pose(self, obj: LabelledObject, x, y, z, rho, phi, theta):
         obj.pose = get_affine_matrix_from_euler([rho, phi, theta], [x, y, z])
 
-    def draw_registered_objects(self, rgb, cam_pose, cam_intrinsics, cam_dist_coeffs):
+    def draw_on_preview(self, rgb, cam_pose, cam_intrinsics, cam_dist_coeffs):
+        if not self.is_active:
+            return rgb
+
         for obj in self._scene.objects.values():
             if not obj.registered:
                 continue

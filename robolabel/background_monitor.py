@@ -124,16 +124,6 @@ class BackgroundMonitor(Entity):
             f"Setting window up for screen with ({self.screen_width_m}, {self.screen_height_m}) meters"
         )
 
-        # MOCK FOR NOW
-        if False:
-            # overwrite to monitor from lab
-            logging.warn("USING MOCK MONITOR DIMENSIONS")
-            self.screen_height = 2160
-            self.screen_width = 3840
-            diagonal_16_by_9 = np.linalg.norm((16, 9))
-            self.screen_width_m = 16 / diagonal_16_by_9 * 0.800
-            self.screen_height_m = 9 / diagonal_16_by_9 * 0.800
-
     def set_image(self, image: np.ndarray) -> None:
         """Set the image of the background monitor"""
         # self.image_tk = ImageTk.PhotoImage(image=Image.fromarray(image))
