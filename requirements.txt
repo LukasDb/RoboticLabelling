@@ -2,3 +2,4 @@ open3d
 opencv-contrib-python==4.6.0.66
 pyrealsense2
 coloredlogs
+screeninfo

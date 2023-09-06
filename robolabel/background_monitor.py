@@ -2,6 +2,7 @@ import numpy as np
 import tkinter as tk
 from .entity import Entity
 from PIL import Image, ImageTk
+import screeninfo
 import pathlib
 import cv2
 import logging
@@ -39,11 +40,11 @@ class BackgroundMonitor(Entity):
         self.window.geometry("+0+0")
         self.setup_window(set_fullscreen=False)
 
-    def get_steps(self, settings: BackgroundSettings) -> list[dict]:
+    def get_steps(self, settings: BackgroundSettings | None) -> list[dict | None]:
+        if settings is None:
+            settings = BackgroundSettings()
         if not settings.use_backgrounds:
-            return [
-                {},
-            ]
+            return [None]
 
         bg_paths = np.random.choice(
             list(str(x) for x in pathlib.Path(settings.backgrounds_path).iterdir()),
@@ -52,7 +53,9 @@ class BackgroundMonitor(Entity):
 
         return [{"background": p} for p in bg_paths]
 
-    def set_step(self, step: dict) -> None:
+    def set_step(self, step: dict | None) -> None:
+        if step is None:
+            return
         if "background" in step:
             bg_path = pathlib.Path(step["background"])
             logging.debug(f"Setting background monitor to {bg_path.name}")
@@ -69,6 +72,8 @@ class BackgroundMonitor(Entity):
         self._load_image_to_full_canvas(textured_path)
 
     def _load_image_to_full_canvas(self, path: pathlib.Path) -> None:
+        self.window.attributes("-fullscreen", True)
+        self.window.update()
         with path.open("rb") as f:
             bg = np.asarray(Image.open(f))
         # scale image to fill the screen
@@ -83,30 +88,44 @@ class BackgroundMonitor(Entity):
 
     def setup_window(self, set_fullscreen=True):
         # get window size
-        self.window.geometry("+0+0")
+        # self.window.geometry("+0+0")
         if set_fullscreen:
             self.window.attributes("-fullscreen", True)
         self.window.update()
         self.width = self.window.winfo_width()
         self.height = self.window.winfo_height()
 
-        # get screen name
-        self.screen_name = self.window.winfo_screen()
+        monitors = screeninfo.get_monitors()
+
+        x, y = self.window.winfo_x(), self.window.winfo_y()
+        monitor = None
+        for m in reversed(monitors):
+            if m.x <= x <= m.width + m.x and m.y <= y <= m.height + m.y:
+                monitor = m
+                break
+
+        if monitor is None:
+            logging.error("Could not find monitor for background monitor")
+            return
 
         # get screen size
-        self.screen_width = self.window.winfo_screenwidth()
-        self.screen_height = self.window.winfo_screenheight()
+        self.screen_width = monitor.width
+        self.screen_height = monitor.height
+        logging.debug(
+            f"Setting window up for screen with ({self.screen_width}, {self.screen_height}) pixels"
+        )
 
         # get screen size in mm
-        self.screen_width_m = self.window.winfo_screenmmwidth() / 1000.0
-        self.screen_height_m = self.window.winfo_screenmmheight() / 1000.0
-
-        # get screen position
-        self.screen_x = self.window.winfo_x()
-        self.screen_y = self.window.winfo_y()
+        assert monitor.width_mm is not None, "Could not measure monitor!"
+        assert monitor.height_mm is not None, "Could not measure monitor!"
+        self.screen_width_m = monitor.width_mm / 1000.0
+        self.screen_height_m = monitor.height_mm / 1000.0
+        logging.debug(
+            f"Setting window up for screen with ({self.screen_width_m}, {self.screen_height_m}) meters"
+        )
 
         # MOCK FOR NOW
-        if True:
+        if False:
             # overwrite to monitor from lab
             logging.warn("USING MOCK MONITOR DIMENSIONS")
             self.screen_height = 2160

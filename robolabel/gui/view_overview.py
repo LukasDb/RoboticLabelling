@@ -57,7 +57,7 @@ class Overview(Observer, tk.Frame):
             self.listen_to(cam)
 
         self.t_previous = time.perf_counter()
-        self.FPS = 20
+        self.FPS = 10
 
         # register task for updating the preview
         self.preview_task = asyncio.get_event_loop().create_task(
@@ -190,8 +190,8 @@ class Overview(Observer, tk.Frame):
 
             w_robot: ttk.Combobox = row_widgets[2]  # type: ignore
             w_robot.bind(
-                "<<ComboboxSelected>>",
-                lambda event, cam_unique_id=cam.unique_id, robot=w_robot: self._on_attach_cam(
+                sequence="<<ComboboxSelected>>",
+                func=lambda event, cam_unique_id=cam.unique_id, robot=w_robot: self._on_attach_cam(
                     cam_unique_id, robot
                 ),
             )

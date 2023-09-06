@@ -35,7 +35,7 @@ class DelayedKeyboardInterrupt:
 class WriterSettings:
     use_writer: bool = True
     output_dir: str = "dataset"
-    occlusion_threshold: float = 0.01
+    occlusion_threshold: float = 0.03
     _is_pre_acquisition: bool = False
 
 
@@ -50,7 +50,9 @@ class DatasetWriter:
 
         self.rendered_depths: dict[Camera, dict[int, np.ndarray]] = {}
 
-    def setup(self, objects: list[LabelledObject], settings: WriterSettings) -> None:
+    def setup(self, objects: list[LabelledObject], settings: WriterSettings | None) -> None:
+        if settings is None:
+            settings = WriterSettings()
         self._active_objects = objects
         self._output_dir = Path(settings.output_dir)
         self._output_dir.mkdir(parents=True, exist_ok=True)

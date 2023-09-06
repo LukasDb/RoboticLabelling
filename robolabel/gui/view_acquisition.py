@@ -141,13 +141,17 @@ class ViewAcquisition(tk.Frame, Observer):
 
     @ensure_free_robot
     def _dry_run(self) -> None:
-        with self.overwrite_settings(self.w_writer_settings, {"use_writer": False}):
-            self._run_acquisition()
+        with (
+            self.overwrite_settings(self.w_writer_settings, {"use_writer": False}),
+            self.overwrite_settings(self.w_background_settings, {"use_backgrounds": False}),
+            self.overwrite_settings(self.w_lights_settings, {"use_lights": False}),
+        ):
+            self.run_acquisition()
 
     @ensure_free_robot
     def _start_acquisition(self) -> None:
         with self.overwrite_settings(self.w_writer_settings, {"_is_pre_acquisition": False}):
-            self._run_acquisition()
+            self.run_acquisition()
 
     @ensure_free_robot
     def _start_pre_acquisition(self) -> None:
@@ -158,33 +162,64 @@ class ViewAcquisition(tk.Frame, Observer):
             self.overwrite_settings(self.w_lights_settings, {"use_lights": False}),
             self.overwrite_settings(self.w_writer_settings, {"_is_pre_acquisition": True}),
         ):
-            self._run_acquisition()
+            self.run_acquisition()
 
-    def _run_acquisition(
+    def run_acquisition(
         self,
     ) -> None:
+        """synchronous wrapper"""
         logging.info("Starting acquisition...")
+        writer_settings: WriterSettings = self.w_writer_settings.get_instance()
+        active_objects = self._active_objects()
+        active_cameras = self._active_cameras()
+        bg_settings = self.w_background_settings.get_instance()
+        lights_settings = self.w_lights_settings.get_instance()
 
+        asyncio.get_event_loop().create_task(
+            self._run_acquisition(
+                active_objects, active_cameras, writer_settings, bg_settings, lights_settings
+            ),
+            name="acquisition",
+        )
+
+    async def _run_acquisition(
+        self,
+        active_objects: list[LabelledObject],
+        active_cameras: list[Camera],
+        writer_settings: WriterSettings,
+        bg_settings: BackgroundSettings,
+        lights_settings: LightsSettings,
+    ):
         trajectory = self.trajectory_generator.get_current_trajectory()
 
         bg_monitor = self.scene.background
         lights_controller = self.scene.lights
         writer = self.writer
 
-        asyncio.get_event_loop().create_task(
-            self.acquisition.execute(
-                self._active_cameras(),
-                self._active_objects(),
-                trajectory,
-                writer=writer,
-                writer_settings=self.w_writer_settings.get_instance(),
-                bg_monitor=bg_monitor,
-                bg_settings=self.w_background_settings.get_instance(),
-                lights_controller=lights_controller,
-                lights_settings=self.w_lights_settings.get_instance(),
-            ),
-            name="acquisition",
-        )
+        # setup writer
+        writer.setup(active_objects, writer_settings)
+
+        print(writer_settings)
+
+        async for idx_trajectory, cam in self.acquisition.execute(
+            active_cameras,
+            trajectory,
+            bg_monitor=bg_monitor,
+            bg_settings=bg_settings,
+            lights_controller=lights_controller,
+            lights_settings=lights_settings,
+        ):
+            logging.info(f"Reached {idx_trajectory+1}/{len(trajectory)} point in trajectory")
+            if writer_settings.use_writer:
+                try:
+                    writer.capture(cam, idx_trajectory)
+                except Exception as e:
+                    logging.error(f"Error while capturing data for camera {cam.name}")
+                    logging.error(e)
+                    import traceback
+
+                    logging.error(traceback.format_exc())
+                    return
 
     def update_observer(self, subject: Observable, event: Event, *args, **kwargs) -> None:
         if event == Event.CAMERA_ADDED:

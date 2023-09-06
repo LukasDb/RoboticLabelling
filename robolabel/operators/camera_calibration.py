@@ -1,12 +1,14 @@
 import pickle
 import numpy as np
+import asyncio
 from pathlib import Path
 import cv2
-from typing import List, Dict
+from typing import List, Dict, Callable
 from robolabel.scene import Scene
 from robolabel.lib.geometry import invert_homogeneous, get_affine_matrix_from_6d_vector
 from robolabel.observer import Event, Observable, Observer
 from robolabel.camera import Camera, DepthQuality
+from robolabel.operators import Acquisition, TrajectoryGenerator, TrajectorySettings
 import cv2
 from tqdm import tqdm
 from cv2 import aruco  # type: ignore
@@ -15,8 +17,10 @@ import logging
 
 
 class CameraCalibrator(Observer):
-    CHESSBOARD_SIZE = 0.0286  # better 0.05 or bigger
-    MARKER_SIZE = 0.023
+    # CHESSBOARD_SIZE = 0.0286  # better 0.05 or bigger
+    # MARKER_SIZE = 0.023
+    CHESSBOARD_SIZE = 0.05
+    MARKER_SIZE = 0.04
     MARKERS = (7, 5)
     CHARUCO_DICT = aruco.DICT_6X6_250
 
@@ -35,6 +39,8 @@ class CameraCalibrator(Observer):
         self.aruco_dict = None
         self.charuco_board = None
         self.markers2monitor = np.eye(4)
+
+        self.trajectory_generator = TrajectoryGenerator()
 
         self.mock_i = 0
 
@@ -89,6 +95,10 @@ class CameraCalibrator(Observer):
         self._scene.background.setup_window()
         self.setup_charuco_board()
 
+    def set_initial_guess(self, x, y, z):
+        self.initial_guess = np.array([x, y, z])
+        logging.debug(f"Changed guess for background monitor to {self.initial_guess}")
+
     def capture_image(self):
         if self.camera is None:
             logging.error("No camera selected")
@@ -116,6 +126,32 @@ class CameraCalibrator(Observer):
         self.captured_images.append(img)
         self.captured_robot_poses.append(robot_pose)
         self.calibration_results.append({"detected": False})
+
+    async def capture_images(self, cb: Callable | None = None):
+        assert self.camera is not None, "No camera selected"
+        trajectory_settings = TrajectorySettings(
+            n_steps=20, view_jitter=0.0, z_cutoff=0.4, r_range=(0.3, 0.6)
+        )
+        trajectory = self.trajectory_generator.generate_trajectory_above_center(
+            self.initial_guess, trajectory_settings
+        )
+        acquisition = Acquisition()
+
+        self.trajectory_generator.visualize_trajectory(self.camera, [])
+
+        logging.debug("Starting acquisition for calibration...")
+
+        i = 0
+        async for _ in acquisition.execute([self.camera], trajectory):
+            i += 1
+            logging.debug(f"Reached {i}/{len(trajectory)}")
+            if cb is not None:
+                cb()
+            await asyncio.sleep(0.1)  # update GUI
+            self.capture_image()
+
+        if cb is not None:
+            cb()
 
     def calibrate(self):
         if self.aruco_dict is None:
@@ -342,7 +378,7 @@ class CameraCalibrator(Observer):
             n_markers[0], n_markers[1], chessboard_size, marker_size, self.aruco_dict
         )
 
-        logging.debug("Creating Charuco image with size: ", charuco_img_width, charuco_img_height)
+        logging.debug(f"Creating Charuco image with size: {charuco_img_width, charuco_img_height}")
         charuco_img = self.charuco_board.draw(
             (round(charuco_img_width), round(charuco_img_height))
         )

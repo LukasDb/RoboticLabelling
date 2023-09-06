@@ -6,8 +6,8 @@ This repository contains our application to generate labelled datasets, intended
 - Recommended: `conda install -c conda-forge openexr-python` 
 - Python 3.10
 - `pip install -r requirements.txt`
-- start with `bash run_app.sh` or `streamlit run main.py`
 - Install the ZED SDK according to their install instructions and the Python API (Keep in mind the USB type C socket of the camera is not reversible)
+- start with `python main.py`
 
 ## Semantics and general info
 - *Objects* are things, with annotations and therefore 3D scanned or modelled digital twins.
@@ -29,9 +29,7 @@ This repository contains our application to generate labelled datasets, intended
         - from placing in known pose (using the monitor for example)
     3. Acquire multiple datapoints
         - from different point of views
-        - with plain colored backgrounds
         - with highest-quality depth
-    4. For each datapoint, generate the pixel perfect mask using color thresholds
     5. Optimize the pose of the object, using ICP with the multiple frames of masked depths and the initial guess
 3. Data acquisition:
     ```

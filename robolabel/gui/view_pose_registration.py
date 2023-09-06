@@ -46,7 +46,9 @@ class ViewPoseRegistration(Observer, ttk.Frame):
         self.object_selection = ttk.Combobox(
             control_frame, values=[o.name for o in self.scene.objects.values()]
         )
-        self.object_selection.bind("<<ComboboxSelected>>", lambda _: self._on_object_selected())
+        self.object_selection.bind(
+            sequence="<<ComboboxSelected>>", func=lambda _: self._on_object_selected()
+        )
 
         self.capture_button = ttk.Button(
             control_frame, text="Capture Image", command=self._on_capture

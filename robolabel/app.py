@@ -104,8 +104,12 @@ class App:
 
     def run(self):
         loop = asyncio.get_event_loop()
-        loop.run_until_complete(self._tk_updater())
-        loop.close()
+        try:
+            loop.run_until_complete(self._tk_updater())
+        except KeyboardInterrupt:
+            self._on_close()
+        finally:
+            loop.close()
 
     async def _tk_updater(self):
         while not self.stop:

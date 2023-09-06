@@ -1,5 +1,7 @@
+import asyncio
 import tkinter as tk
 from tkinter import ttk
+import logging
 from PIL import ImageTk, Image
 import numpy as np
 import cv2
@@ -53,7 +55,7 @@ class ViewCalibration(ttk.Frame):
 
         self.image_selection = ttk.Combobox(control_frame)
         self.image_selection.bind(
-            "<<ComboboxSelected>>", lambda _: self.update_selected_image_preview()
+            sequence="<<ComboboxSelected>>", func=lambda _: self.update_selected_image_preview()
         )
 
         self.calibrate_button = ttk.Button(
@@ -62,11 +64,36 @@ class ViewCalibration(ttk.Frame):
             command=self.on_calibrate,
         )
 
+        def sb_pos() -> ttk.Spinbox:
+            spinbox = ttk.Spinbox(
+                control_frame,
+                from_=-1.0,
+                to=1.0,
+                increment=0.01,
+                command=lambda: self._change_initial_guess(),
+            )
+            # bind self._on_change to spinbox
+            spinbox.bind("<Return>", lambda _: self._change_initial_guess())
+            return spinbox
+
+        self.guess_x = sb_pos()
+        self.guess_y = sb_pos()
+        self.guess_z = sb_pos()
+
+        self.guess_x.set(0.367)
+        self.guess_y.set(-0.529)
+        self.guess_z.set(-0.16)
+
+        self._change_initial_guess()
+
         pady = 5
         self.btn_setup.grid(pady=pady)
         self.capture_button.grid(pady=pady)
         self.clear_button.grid(pady=pady)
         self.image_selection.grid(pady=pady)
+        self.guess_x.grid(pady=pady)
+        self.guess_y.grid(pady=pady)
+        self.guess_z.grid(pady=pady)
         self.calibrate_button.grid(pady=pady)
 
         return control_frame
@@ -91,16 +118,17 @@ class ViewCalibration(ttk.Frame):
             self.selected_image_canvas.set_image(img)
 
     def on_capture(self):
-        self.calibrator.capture_image()
-        if len(self.calibrator.captured_images) == 0:
-            return
+        def update_previews():
+            if len(self.calibrator.captured_images) == 0:
+                return
+            self.image_selection["values"] = [
+                f"Image {i:2}" for i in range(len(self.calibrator.captured_images))
+            ]
+            self.image_selection.set(self.image_selection["values"][-1])
 
-        self.image_selection["values"] = [
-            f"Image {i:2}" for i in range(len(self.calibrator.captured_images))
-        ]
-        self.image_selection.set(self.image_selection["values"][-1])
+            self.update_selected_image_preview()
 
-        self.update_selected_image_preview()
+        asyncio.get_event_loop().create_task(self.calibrator.capture_images(update_previews))
 
     def on_calibrate(self):
         self.calibrator.calibrate()
@@ -111,3 +139,14 @@ class ViewCalibration(ttk.Frame):
         self.image_selection["values"] = []
         self.image_selection.set("")
         self.selected_image_canvas.clear_image()
+
+    def _change_initial_guess(self):
+        try:
+            x = float(self.guess_x.get())  # user inputs in spinbox
+            y = float(self.guess_y.get())
+            z = float(self.guess_z.get())
+        except ValueError:
+            logging.error("Must enter float values!")
+            return
+
+        self.calibrator.set_initial_guess(x, y, z)

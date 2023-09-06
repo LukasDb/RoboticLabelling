@@ -76,10 +76,10 @@ class SettingsWidget(ttk.Frame):
             if k.startswith("_"):
                 self._private_vars[k] = v
             else:
-                self._set_widget(k, v)
+                self._set_var(k, v)
         self.update()
 
-    def _set_widget(self, name, value):
+    def _set_var(self, name, value):
         var = self.vars[name]
 
         if isinstance(var, tuple) or isinstance(var, list):

@@ -11,11 +11,11 @@ from scipy.spatial.transform import Rotation as R
 @dataclass
 class TrajectorySettings:
     n_steps: int = 20  # number of steps in the trajectory
-    r_range: tuple[float, float] = (0.4, 1.0)  # min and max distance from center of objects
-    z_cutoff: float = 0.2  # minimum height above the objects
-    reach_dist_cutoff: float = 0.4  # how much to reach "behind" the objects
+    r_range: tuple[float, float] = (0.3, 0.6)  # min and max distance from center of objects
+    z_cutoff: float = 0.4  # minimum height above the objects
+    reach_dist_cutoff: float = 0.3  # how much to reach "behind" the objects
     min_robot_dist: float = 0.5  # minimum distance to the robot
-    view_jitter: float = 0.1  # how much to jitter the view direction in m as offset of the center
+    view_jitter: float = 0.05  # how much to jitter the view direction in m as offset of the center
 
 
 class TrajectoryGenerator:
@@ -24,7 +24,7 @@ class TrajectoryGenerator:
 
     def generate_trajectory(
         self, active_objects: list[LabelledObject], settings: TrajectorySettings
-    ):
+    ) -> list[np.ndarray] | None:
         """generates a trajectory based on the selected objects.
         The points are generated in a hemisphere above the center of the objects.
         Afterwards the hemisphere is again cut in half towards the robot (is in center of world coordinates)
@@ -38,13 +38,17 @@ class TrajectoryGenerator:
 
         object_positions = np.array([o.get_position() for o in active_objects])
         center = np.mean(object_positions, axis=0)
+        return self.generate_trajectory_above_center(center, settings)
 
+    def generate_trajectory_above_center(
+        self, center: np.ndarray, settings: TrajectorySettings
+    ) -> list[np.ndarray]:
         # random sample on unit sphere
         rots = R.random(2000)
         rots = np.array(rots)
 
-        center_normed = center / np.linalg.norm(center)
         center_dist = np.linalg.norm(center)
+        center_normed = center / center_dist
 
         # rejection sampling of points on the sphere
         positions = []
@@ -101,9 +105,19 @@ class TrajectoryGenerator:
         # generate poses from positions
         trajectory = []
         for pos in positions:
-            view_center = center + np.random.uniform(
-                -settings.view_jitter, settings.view_jitter, size=3
-            )
+            # jitter applies only to the view direction (orientation)
+            if isinstance(settings.view_jitter, float):
+                view_center = center + np.random.uniform(
+                    -settings.view_jitter, settings.view_jitter, size=3
+                )
+            else:
+                view_center = center + np.array(
+                    [
+                        np.random.uniform(-settings.view_jitter[i], settings.view_jitter[i])
+                        for i in range(3)
+                    ]
+                )
+
             to_point = pos - view_center
             view_yaw = np.arctan2(to_point[1], to_point[0]) + np.pi / 2
             view_pitch = -np.pi / 2 - np.arctan2(to_point[2], np.linalg.norm(to_point[:2]))
@@ -119,11 +133,16 @@ class TrajectoryGenerator:
 
         logging.info(f"Generated trajectory with {len(trajectory)} poses")
         self._current_trajectory = trajectory
+        return trajectory
 
     def visualize_trajectory(self, camera: Camera, objects: list[LabelledObject]) -> None:
         assert self._current_trajectory is not None, "Generate trajectory first"
 
         w, h = camera.width, camera.height
+        try:
+            intrinsics = camera.intrinsic_matrix
+        except AssertionError:
+            intrinsics = np.array([[w, 0.0, w / 2], [0.0, w, h / 2], [0.0, 0.0, 1.0]])
 
         vis_views = []
         for pose in self._current_trajectory:
@@ -132,7 +151,7 @@ class TrajectoryGenerator:
             frustum = o3d.geometry.LineSet.create_camera_visualization(
                 w,
                 h,
-                camera.intrinsic_matrix,
+                intrinsics,
                 invert_homogeneous(pose),
                 0.05,
             )
