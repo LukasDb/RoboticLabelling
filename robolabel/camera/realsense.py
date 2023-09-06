@@ -2,6 +2,7 @@ from .camera import Camera, CamFrame, DepthQuality
 import numpy as np
 from typing import List
 import cv2
+from pathlib import Path
 import pyrealsense2 as rs
 import logging
 
@@ -20,7 +21,11 @@ class Realsense(Camera):
         for dev in devices:
             logging.info(f"Found device: {dev.get_info(rs.camera_info.name)}")  # type: ignore
             serial_number = dev.get_info(rs.camera_info.serial_number)  # type: ignore
-            cams.append(Realsense(serial_number))
+            try:
+                cams.append(Realsense(serial_number))
+            except Exception as e:
+                logging.error(f"Could not initialize Realsense: {serial_number}: " + str(e))
+
         return cams
 
     def __init__(self, serial_number):
@@ -29,16 +34,11 @@ class Realsense(Camera):
 
         self._pipeline = rs.pipeline()  # type: ignore
         self._config = config = rs.config()  # type: ignore
-        # config.enable_device(self._serial_number)
+        config.enable_device(self._serial_number)
 
         pipeline_wrapper = rs.pipeline_wrapper(self._pipeline)  # type: ignore
-        try:
-            pipeline_profile = config.resolve(pipeline_wrapper)
-        except RuntimeError:
-            logging.error(
-                "Realsense Device is not connected. Please connect the device and try again."
-            )
-            exit()
+        pipeline_profile = config.resolve(pipeline_wrapper)
+
         self.device = pipeline_profile.get_device()
         super().__init__(self.device.get_info(rs.camera_info.name))  # type: ignore
 
@@ -47,28 +47,28 @@ class Realsense(Camera):
         self.align_to_rgb = rs.align(rs.stream.color)  # type: ignore
 
         self.temporal_filter = rs.temporal_filter(  # type: ignore
-            smooth_alpha=0.2,
-            smooth_delta=5,
-            persistence_control=2,
+            smooth_alpha=0.4,
+            smooth_delta=20,
+            persistence_control=3,
         )
 
         self.spatial_filter = rs.spatial_filter(  # type: ignore
             smooth_alpha=0.5,
             smooth_delta=20,
-            magnitude=2,
-            hole_fill=1,
+            magnitude=1,
+            hole_fill=2,
+        )
+
+        rs.rs400_advanced_mode(self.device).load_json(  # type: ignore
+            str(Path("realsense_profiles/depth_HQ.json").read_text())
         )
 
         self.depth_scale = self.device.first_depth_sensor().get_depth_scale()
 
         # Start streaming
         self.is_started = False
-        try:
-            self._pipeline.start(self._config)
-            self.is_started = True
-        except RuntimeError as e:
-            logging.error(f"Could not start camera stream ({self.name})")
-            logging.error(e)
+        self._pipeline.start(self._config)
+        self.is_started = True
 
     def get_frame(self, depth_quality: DepthQuality) -> CamFrame:
         if depth_quality != DepthQuality.UNCHANGED and depth_quality != self._depth_quality:

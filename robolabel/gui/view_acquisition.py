@@ -199,8 +199,6 @@ class ViewAcquisition(tk.Frame, Observer):
         # setup writer
         writer.setup(active_objects, writer_settings)
 
-        print(writer_settings)
-
         async for idx_trajectory, cam in self.acquisition.execute(
             active_cameras,
             trajectory,

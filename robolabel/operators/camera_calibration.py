@@ -286,39 +286,35 @@ class CameraCalibrator(Observer):
     def _draw_cal_result(self, cam: Camera, cal_result: CalibrationDatapoint):
         img = cal_result.img.copy()
 
-        if not cal_result.detected:
-            return img
+        if cal_result.detected:
+            corners = cal_result.corners
+            ids = cal_result.ids
 
-        corners = cal_result.corners
-        ids = cal_result.ids
-
-        if len(corners) > 0:
-            cv2.aruco.drawDetectedMarkers(img, corners, ids)  # type: ignore
+            if len(corners) > 0:
+                cv2.aruco.drawDetectedMarkers(img, corners, ids)  # type: ignore
 
         # if calibrated then also draw the monitor
-        if not cam.is_calibrated():
-            return img
+        if cam.is_calibrated():
+            monitor = self._scene.background
 
-        monitor = self._scene.background
+            # draw optimized calibration result
+            world2robot = cal_result.robot_pose
+            world2cam = world2robot @ cam.extrinsic_matrix
+            cam2monitor = invert_homogeneous(world2cam) @ monitor.pose
+            monitor.draw_on_rgb(img, cam.intrinsic_matrix, cam.dist_coeffs, cam2monitor)
 
-        # draw optimized calibration result
-        world2robot = cal_result.robot_pose
-        world2cam = world2robot @ cam.extrinsic_matrix
-        cam2monitor = invert_homogeneous(world2cam) @ monitor.pose
-        monitor.draw_on_rgb(img, cam.intrinsic_matrix, cam.dist_coeffs, cam2monitor)
-
-        # draw per-image calibration result
-        if cal_result.estimated_pose6d is not None:
-            pose6d = cal_result.estimated_pose6d
-            mat = get_affine_matrix_from_6d_vector("Rodriguez", pose6d)
-            cam2monitor = mat @ self.markers2monitor
-            monitor.draw_on_rgb(
-                img,
-                cam.intrinsic_matrix,
-                cam.dist_coeffs,
-                cam2monitor,
-                color=(255, 0, 0),
-            )
+            # draw per-image calibration result
+            if cal_result.estimated_pose6d is not None:
+                pose6d = cal_result.estimated_pose6d
+                mat = get_affine_matrix_from_6d_vector("Rodriguez", pose6d)
+                cam2monitor = mat @ self.markers2monitor
+                monitor.draw_on_rgb(
+                    img,
+                    cam.intrinsic_matrix,
+                    cam.dist_coeffs,
+                    cam2monitor,
+                    color=(255, 0, 0),
+                )
         return img
 
     def setup_charuco_board(self):

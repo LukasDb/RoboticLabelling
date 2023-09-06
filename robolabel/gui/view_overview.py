@@ -8,6 +8,7 @@ import logging
 import numpy as np
 import time
 import cv2
+import dataclasses
 
 from robolabel.scene import Scene
 from robolabel.labelled_object import LabelledObject
@@ -33,6 +34,8 @@ class Overview(Observer, tk.Frame):
         self._registrator = registrator
         self.listen_to(self._scene)
 
+        self._selected_stream = tk.StringVar()
+
         self.cam_list: WidgetList
         self.object_list: WidgetList
 
@@ -51,10 +54,14 @@ class Overview(Observer, tk.Frame):
 
         self._update_cam_table()
         self._update_object_table()
-        self.camera_selection.configure(values=[c.unique_id for c in self._scene.cameras.values()])
+        cams = [c.unique_id for c in self._scene.cameras.values()]
+        self.camera_selection.configure(values=cams)
         # listen to all cameras
         for cam in self._scene.cameras.values():
             self.listen_to(cam)
+
+        self.camera_selection.set(cams[-1])
+        self._on_camera_selection_change(None)
 
         self.t_previous = time.perf_counter()
         self.FPS = 10
@@ -81,9 +88,8 @@ class Overview(Observer, tk.Frame):
             self._update_cam_table()
             for cam in self._scene.cameras.values():
                 self.listen_to(cam)
-            self.camera_selection.configure(
-                values=[c.unique_id for c in self._scene.cameras.values()]
-            )
+            available_cameras = [c.unique_id for c in self._scene.cameras.values()]
+            self.camera_selection.configure(values=available_cameras)
 
         elif event in [Event.OBJECT_REMOVED, Event.OBJECT_REGISTERED, Event.OBJECT_ADDED]:
             self._update_object_table()
@@ -97,14 +103,24 @@ class Overview(Observer, tk.Frame):
         control_frame.columnconfigure(0, weight=1)
 
         cam_select_frame = tk.Frame(control_frame)
-        self.camera_selection = ttk.Combobox(
-            cam_select_frame, values=[c.unique_id for c in self._scene.cameras.values()]
-        )
-        self.camera_selection.set("")
-        self.camera_selection.bind("<<ComboboxSelected>>", self._on_camera_selection_change)
         camera_selection_label = tk.Label(cam_select_frame, text="Selected Camera")
         camera_selection_label.grid(row=0, column=0, padx=5, sticky=tk.NW)
-        self.camera_selection.grid(row=0, column=1, sticky=tk.NW)
+
+        self.camera_selection = ttk.Combobox(cam_select_frame, values=[])
+        self.camera_selection.set("")
+        self.camera_selection.bind("<<ComboboxSelected>>", self._on_camera_selection_change)
+        self.camera_selection.grid(row=0, column=1, sticky=tk.NW, padx=5)
+
+        self.stream_selection = ttk.Combobox(
+            cam_select_frame, values=["rgb"], textvariable=self._selected_stream
+        )
+        self.stream_selection.set("rgb")
+        self.stream_selection.grid(
+            row=0,
+            column=2,
+            sticky=tk.NW,
+            padx=5,
+        )
 
         obj_select_frame = tk.Frame(control_frame)
         self.object_selection = ttk.Combobox(
@@ -281,56 +297,43 @@ class Overview(Observer, tk.Frame):
             logging.error(f"Failed to get frame from camera: {e}")
             return
 
-        previews = []
-        if frame.rgb is not None:
-            img = frame.rgb.copy()
+        self.stream_selection.configure(
+            values=[k for k, v in dataclasses.asdict(frame).items() if v is not None]
+        )
 
-            img = self._calibrator.draw_on_preview(selected_cam, img)
-
-            img = self._registrator.draw_on_preview(
-                selected_cam,
-                img,
-            )
-
-            # draw FPS in top left cornere
-            fps = 1 / (time.perf_counter() - self.t_previous_frame)
-            self.t_previous_frame = time.perf_counter()
-            cv2.putText(  # type: ignore
-                img,
-                f"{fps:.1f} FPS",
-                (10, 80),
-                cv2.FONT_HERSHEY_SIMPLEX,  # type: ignore
-                2,
-                (0, 255, 0),  # draws on RGB image!
-                3,
-                cv2.LINE_AA,  # type: ignore
-            )
-            previews.append(img)
-
-        # if frame.depth is not None:
-        #     colored_depth = self._color_depth(frame.depth)
-        #     previews.append(colored_depth)
-
-        # if frame.rgb_R is not None:
-        #     previews.append(frame.rgb_R)
-
-        # if frame.depth_R is not None:
-        #     colored_depth_R = self._color_depth(frame.depth_R)
-        #     previews.append(colored_depth_R)
-
-        if len(previews) == 0:
+        try:
+            stream_name = self._selected_stream.get()
+            preview = getattr(frame, stream_name).copy()
+        except AttributeError:
+            logging.debug(f"Stream {stream_name} not available")
             self.live_canvas.clear_image()
             return
 
-        # assemble previews in grid
-        if len(previews) in [1, 2, 3]:
-            prev = np.vstack(previews)
-        elif len(previews) == 4:
-            prev = np.vstack([np.hstack(previews[:2]), np.hstack(previews[2:])])
-        else:
-            raise ValueError(f"Cannot show {len(previews)} previews")
+        if "depth" in stream_name:
+            preview = self._color_depth(preview)
 
-        self.live_canvas.set_image(prev)
+        if "_R" not in stream_name:
+            preview = self._calibrator.draw_on_preview(selected_cam, preview)
+            preview = self._registrator.draw_on_preview(
+                selected_cam,
+                preview,
+            )
+
+        # draw FPS in top left cornere
+        fps = 1 / (time.perf_counter() - self.t_previous_frame)
+        self.t_previous_frame = time.perf_counter()
+        cv2.putText(  # type: ignore
+            preview,
+            f"{fps:.1f} FPS",
+            (10, 80),
+            cv2.FONT_HERSHEY_SIMPLEX,  # type: ignore
+            2,
+            (0, 255, 0),  # draws on RGB image!
+            3,
+            cv2.LINE_AA,  # type: ignore
+        )
+
+        self.live_canvas.set_image(preview)
 
     def _color_depth(self, depth) -> np.ndarray:
         return cv2.cvtColor(  # type: ignore

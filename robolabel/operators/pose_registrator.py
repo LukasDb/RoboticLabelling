@@ -201,11 +201,7 @@ class PoseRegistrator(Observer):
         return img
 
     def draw_on_preview(self, cam: Camera, rgb: np.ndarray):
-        if not self.is_active:
-            return rgb
-
-        if not cam.is_calibrated():
-            print("not calibrated")
+        if not self.is_active or not cam.is_calibrated():
             return rgb
 
         for obj in self._scene.objects.values():
