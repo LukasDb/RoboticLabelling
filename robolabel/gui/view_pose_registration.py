@@ -1,3 +1,4 @@
+import asyncio
 import tkinter as tk
 from tkinter import ttk
 from robolabel.lib.geometry import get_euler_from_affine_matrix
@@ -19,10 +20,10 @@ class ViewPoseRegistration(Observer, ttk.Frame):
         self.title.grid(columnspan=2)
 
         controls = self.setup_controls(self)
-        previews = self.setup_previews(self)
+        self.preview = ResizableImage(self, bg="#000000")
 
         controls.grid(row=1, column=1, sticky=tk.NSEW)
-        previews.grid(row=1, column=0, sticky=tk.NSEW)
+        self.preview.grid(row=1, column=0, sticky=tk.NSEW)
 
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, minsize=300, weight=1)
@@ -30,32 +31,39 @@ class ViewPoseRegistration(Observer, ttk.Frame):
     def update_observer(self, subject: Observable, event: Event, *args, **kwargs):
         if event == Event.OBJECT_ADDED:
             # configure choices for object selection
-            self.object_selection.configure(values=[o.name for o in self.scene.objects.values()])
             self.listen_to(kwargs["object"])
         elif event == Event.OBJECT_REMOVED:
             # configure choices for object selection
-            self.object_selection.configure(values=[o.name for o in self.scene.objects.values()])
-        elif event == Event.OBJECT_REGISTERED:
-            # update controls rerender buffer
-            self._update_gui_from_object_pose()
-            self._preview_buffer()
+            self.stop_listening(kwargs["object"])
+
+        if event in [
+            Event.OBJECT_REGISTERED,
+            Event.OBJECT_SELECTED,
+            Event.OBJECT_ADDED,
+            Event.MODE_CHANGED,
+        ]:
+            self._update_gui()
 
     def setup_controls(self, master) -> ttk.Frame:
         control_frame = ttk.Frame(master)
-
-        self.object_selection = ttk.Combobox(
-            control_frame, values=[o.name for o in self.scene.objects.values()]
-        )
-        self.object_selection.bind(
-            sequence="<<ComboboxSelected>>", func=lambda _: self._on_object_selected()
-        )
 
         self.capture_button = ttk.Button(
             control_frame, text="Capture Image", command=self._on_capture
         )
 
+        self.auto_capture_button = ttk.Button(
+            control_frame,
+            text="Run automatic acquisition",
+            command=self._on_automatic_acquisition,
+        )
+
+        self.image_selection = ttk.Combobox(control_frame)
+        self.image_selection.bind(
+            sequence="<<ComboboxSelected>>", func=lambda _: self._update_gui()
+        )
+
         # add button
-        self.update_button = ttk.Button(
+        self.optimize_button = ttk.Button(
             control_frame,
             text="Optimize",
             command=self.registrator.optimize_pose,
@@ -72,12 +80,15 @@ class ViewPoseRegistration(Observer, ttk.Frame):
         )
 
         # add button to move object pose
-        self.position_label = ttk.Label(control_frame, text="Position:")
-        self.orientation_label = ttk.Label(control_frame, text="Orientation:")
+        pose_frame = ttk.Frame(control_frame)  # 2 columns for pos and orn
+        self.position_label = ttk.Label(pose_frame, text="Position:")
+        self.orientation_label = ttk.Label(pose_frame, text="Orientation:")
+        self.position_label.grid(row=0, column=0, sticky=tk.W)
+        self.orientation_label.grid(row=0, column=1, sticky=tk.W)
 
-        def sb_pos() -> ttk.Spinbox:
+        def sb_pos(row: int) -> ttk.Spinbox:
             spinbox = ttk.Spinbox(
-                control_frame,
+                pose_frame,
                 from_=-1.0,
                 to=1.0,
                 increment=0.01,
@@ -85,87 +96,46 @@ class ViewPoseRegistration(Observer, ttk.Frame):
             )
             # bind self._on_change to spinbox
             spinbox.bind("<Return>", lambda _: self._change_initial_guess())
+            spinbox.grid(pady=5, column=0, row=row)
             return spinbox
 
-        def sb_rot() -> ttk.Spinbox:
+        def sb_rot(row: int) -> ttk.Spinbox:
             # seperat spinbox for rotation
             spinbox = ttk.Spinbox(
-                control_frame,
+                pose_frame,
                 from_=-180,
                 to=180,
                 increment=10,
                 command=lambda: self._change_initial_guess(),
             )
             spinbox.bind("<Return>", lambda _: self._change_initial_guess())
+            spinbox.grid(pady=5, column=1, row=row)
             return spinbox
 
-        self.manual_pose_x = sb_pos()  # boxes for position user input
-        self.manual_pose_y = sb_pos()
-        self.manual_pose_z = sb_pos()
+        self.manual_pose_x = sb_pos(1)  # boxes for position user input
+        self.manual_pose_y = sb_pos(2)
+        self.manual_pose_z = sb_pos(3)
 
-        self.manual_pose_rho = sb_rot()  # for angles
-        self.manual_pose_phi = sb_rot()
-        self.manual_pose_theta = sb_rot()
+        self.manual_pose_rho = sb_rot(1)  # for angles
+        self.manual_pose_phi = sb_rot(2)
+        self.manual_pose_theta = sb_rot(3)
 
         pady = 5
         pady_L = 20
+
+        # control frame
         self.capture_button.grid(pady=pady)
-        self.object_selection.grid(pady=pady)
-        self.position_label.grid(pady=pady_L)
-        self.manual_pose_x.grid(pady=pady)
-        self.manual_pose_y.grid(pady=pady)
-        self.manual_pose_z.grid(pady=pady)
-        self.orientation_label.grid(pady=pady_L)
-        self.manual_pose_rho.grid(pady=pady)
-        self.manual_pose_phi.grid(pady=pady)
-        self.manual_pose_theta.grid(pady=pady)
-        self.update_button.grid(pady=pady_L)
+        self.auto_capture_button.grid(pady=pady)
+        self.image_selection.grid(pady=pady)
+
+        pose_frame.grid(pady=pady_L)
+
+        self.optimize_button.grid(pady=pady_L)
+
         self.reset_pose_button.grid(pady=pady)
         self.reset_button.grid(pady=pady)
 
         return control_frame
-
-    def setup_previews(self, master):
-        preview_frame = ttk.Frame(master)
-        preview_frame.columnconfigure(0, weight=1)
-        preview_frame.columnconfigure(1, weight=1)
-        preview_frame.rowconfigure(0, weight=1)
-        preview_frame.rowconfigure(1, weight=1)
-
-        prev0 = ResizableImage(preview_frame, bg="#000000")
-        prev0.grid(row=0, column=0, sticky=tk.NSEW)
-
-        prev1 = ResizableImage(preview_frame, bg="#000000")
-        prev1.grid(row=0, column=1, sticky=tk.NSEW)
-
-        prev2 = ResizableImage(preview_frame, bg="#000000")
-        prev2.grid(row=1, column=0, sticky=tk.NSEW)
-
-        prev3 = ResizableImage(preview_frame, bg="#000000")
-        prev3.grid(row=1, column=1, sticky=tk.NSEW)
-
-        self.previews = [prev0, prev1, prev2, prev3]
-        return preview_frame
-
-    def _on_object_selected(self):
-        self.scene.select_object_by_name(self.object_selection.get())
-        self._preview_buffer()
-        self._update_gui_from_object_pose()
-
-    def _update_gui_from_object_pose(self):
-        if self.scene.selected_object is None:
-            return
-
-        (rho, phi, theta), (x, y, z) = get_euler_from_affine_matrix(
-            self.scene.selected_object.pose
-        )
-
-        self.manual_pose_x.set(float(x))  # set first spinbox values to current pose
-        self.manual_pose_y.set(float(y))
-        self.manual_pose_z.set(float(z))
-        self.manual_pose_rho.set(float(rho))
-        self.manual_pose_phi.set(float(phi))
-        self.manual_pose_theta.set(float(theta))
 
     def _change_initial_guess(self):
         if self.scene.selected_object is not None:
@@ -188,38 +158,60 @@ class ViewPoseRegistration(Observer, ttk.Frame):
 
             self.registrator.move_pose(self.scene.selected_object, x, y, z, rho, phi, theta)
 
-            self._preview_buffer()  # paint new mesh
+            self._update_gui()  # paint new mesh
 
     def _on_capture(self):
-        self.registrator.capture_image()
-        self._preview_buffer()
+        self.registrator.capture()
+        self._update_gui(set_to_last_image=True)
 
-    def _preview_buffer(self):
-        for datapoint, preview in zip(self.registrator.datapoints[-4:], self.previews):
-            if datapoint is None:
-                continue
-
-            img = datapoint.rgb.copy()
-            if self.scene.selected_object is not None:
-                img = self.registrator.draw_registered_object(
-                    self.scene.selected_object,
-                    img,
-                    datapoint.pose,
-                    datapoint.intrinsics,
-                    datapoint.dist_coeffs,
-                )
-            preview.set_image(img)
+    def _on_automatic_acquisition(self):
+        asyncio.get_event_loop().create_task(
+            self.registrator.capture_images(lambda: self._update_gui(set_to_last_image=True))
+        )
 
     def _on_reset_pose(self):
         monitor_pose = self.scene.background.pose
         if self.scene.selected_object is not None:
             self.scene.selected_object.pose = monitor_pose  # add this as inital position
-        self._update_gui_from_object_pose()
-        self._preview_buffer()
+        self._update_gui()
 
     def _on_reset(self):
         self.registrator.reset()
-        self._update_gui_from_object_pose()
-        self._preview_buffer()
-        for prev in self.previews:
-            prev.clear_image()
+        self._update_gui()
+
+    def _update_gui(self, set_to_last_image=False):
+        if self.scene.selected_object is None:
+            return
+
+        (rho, phi, theta), (x, y, z) = get_euler_from_affine_matrix(
+            self.scene.selected_object.pose
+        )
+
+        self.manual_pose_x.set(float(x))  # set first spinbox values to current pose
+        self.manual_pose_y.set(float(y))
+        self.manual_pose_z.set(float(z))
+        self.manual_pose_rho.set(float(rho))
+        self.manual_pose_phi.set(float(phi))
+        self.manual_pose_theta.set(float(theta))
+
+        # update preview
+        if len(self.registrator.datapoints) == 0:
+            self.preview.clear_image()
+            return
+
+        self.image_selection["values"] = [
+            f"Image {i:2}" for i in range(len(self.registrator.datapoints))
+        ]
+        if set_to_last_image:
+            self.image_selection.set(self.image_selection["values"][-1])
+
+        selected = self.image_selection.get()
+        try:
+            selected_index = int(selected.split(" ")[-1])
+        except ValueError:
+            return
+        img = self.registrator.get_from_image_cache(selected_index)
+        if img is not None:
+            self.preview.set_image(img)
+        else:
+            self.preview.clear_image()

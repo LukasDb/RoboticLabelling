@@ -71,12 +71,12 @@ class Overview(Observer, tk.Frame):
         return super().destroy()
 
     def update_observer(self, subject, event: Event, *args, **kwargs):
-        if (
-            event == Event.CAMERA_CALIBRATED
-            or event == Event.CAMERA_ATTACHED
-            or event == Event.CAMERA_ADDED
-            or event == Event.ROBOT_ADDED
-        ):
+        if event in [
+            Event.CAMERA_CALIBRATED,
+            Event.CAMERA_ATTACHED,
+            Event.CAMERA_ADDED,
+            Event.ROBOT_ADDED,
+        ]:
             # update calibrated column
             self._update_cam_table()
             for cam in self._scene.cameras.values():
@@ -85,14 +85,12 @@ class Overview(Observer, tk.Frame):
                 values=[c.unique_id for c in self._scene.cameras.values()]
             )
 
-        elif (
-            event == Event.OBJECT_REMOVED
-            or event == Event.OBJECT_REGISTERED
-            or event == Event.OBJECT_ADDED
-        ):
+        elif event in [Event.OBJECT_REMOVED, Event.OBJECT_REGISTERED, Event.OBJECT_ADDED]:
             self._update_object_table()
-            for obj in self._scene.objects.values():
-                self.listen_to(obj)
+            if event == Event.OBJECT_ADDED:
+                self.listen_to(kwargs["object"])
+            elif event == Event.OBJECT_REMOVED:
+                self.stop_listening(kwargs["object"])
 
     def setup_controls(self, master):
         control_frame = tk.Frame(master)
@@ -107,6 +105,16 @@ class Overview(Observer, tk.Frame):
         camera_selection_label = tk.Label(cam_select_frame, text="Selected Camera")
         camera_selection_label.grid(row=0, column=0, padx=5, sticky=tk.NW)
         self.camera_selection.grid(row=0, column=1, sticky=tk.NW)
+
+        obj_select_frame = tk.Frame(control_frame)
+        self.object_selection = ttk.Combobox(
+            obj_select_frame, values=[o.name for o in self._scene.objects.values()]
+        )
+        self.object_selection.set("")
+        self.object_selection.bind("<<ComboboxSelected>>", self._on_object_selected)
+        object_selection_label = tk.Label(obj_select_frame, text="Selected Object")
+        object_selection_label.grid(row=0, column=0, padx=5, sticky=tk.NW)
+        self.object_selection.grid(row=0, column=1, sticky=tk.NW)
 
         capture_frame = ttk.Frame(control_frame)
         capture_button = ttk.Button(capture_frame, text="Capture Image", command=self._on_capture)
@@ -126,6 +134,7 @@ class Overview(Observer, tk.Frame):
         )
 
         cam_select_frame.grid(sticky=tk.NSEW, pady=10)
+        obj_select_frame.grid(sticky=tk.NSEW, pady=10)
         capture_frame.grid(sticky=tk.NSEW, pady=10)
         self.cam_list.grid(sticky=tk.NSEW, pady=10)
         self.object_list.grid(sticky=tk.NSEW, pady=10)
@@ -243,6 +252,10 @@ class Overview(Observer, tk.Frame):
         selected = self.camera_selection.get()
         self._scene.select_camera_by_id(selected)
 
+    def _on_object_selected(self, _):
+        selected = self.object_selection.get()
+        self._scene.select_object_by_name(selected)
+
     async def live_preview(self):
         self.t_previous_frame = time.perf_counter()
         while True:
@@ -259,7 +272,6 @@ class Overview(Observer, tk.Frame):
 
         if selected_cam is None:
             self.live_canvas.clear_image()
-            logging.debug("[preview] No camera selected")
             return
 
         try:
@@ -276,10 +288,8 @@ class Overview(Observer, tk.Frame):
             img = self._calibrator.draw_on_preview(selected_cam, img)
 
             img = self._registrator.draw_on_preview(
+                selected_cam,
                 img,
-                selected_cam.pose,
-                selected_cam.intrinsic_matrix,
-                selected_cam.dist_coeffs,
             )
 
             # draw FPS in top left cornere
@@ -297,20 +307,19 @@ class Overview(Observer, tk.Frame):
             )
             previews.append(img)
 
-        if frame.depth is not None:
-            colored_depth = self._color_depth(frame.depth)
-            previews.append(colored_depth)
+        # if frame.depth is not None:
+        #     colored_depth = self._color_depth(frame.depth)
+        #     previews.append(colored_depth)
 
-        if frame.rgb_R is not None:
-            previews.append(frame.rgb_R)
+        # if frame.rgb_R is not None:
+        #     previews.append(frame.rgb_R)
 
-        if frame.depth_R is not None:
-            colored_depth_R = self._color_depth(frame.depth_R)
-            previews.append(colored_depth_R)
+        # if frame.depth_R is not None:
+        #     colored_depth_R = self._color_depth(frame.depth_R)
+        #     previews.append(colored_depth_R)
 
         if len(previews) == 0:
             self.live_canvas.clear_image()
-            logging.debug("[preview] No images to show")
             return
 
         # assemble previews in grid

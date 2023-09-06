@@ -7,7 +7,7 @@ from typing import List, Dict, Callable
 from robolabel.scene import Scene
 from robolabel.lib.geometry import invert_homogeneous, get_affine_matrix_from_6d_vector
 from robolabel.observer import Event, Observable, Observer
-from robolabel.camera import Camera, DepthQuality
+from robolabel.camera import Camera, DepthQuality, DemoCam
 from robolabel.operators import Acquisition, TrajectoryGenerator, TrajectorySettings
 import cv2
 from tqdm import tqdm
@@ -48,22 +48,26 @@ class CameraCalibrator(Observer):
         self.markers2monitor = np.eye(4)
         self.trajectory_generator = TrajectoryGenerator()
 
-        self.setup_charuco_board(mock=True)
+        self.setup_charuco_board()
 
     def update_observer(self, subject: Observable, event: Event, *args, **kwargs):
-        if event == Event.CAMERA_SELECTED:
-            if len(self.calibration_datapoints) != 0:
-                logging.error("Calibration resetted because of camera switch.")
-                self.reset()
-            self.camera: Camera | None = kwargs["camera"]
-
-        elif event == Event.MODE_CHANGED:
+        if event == Event.MODE_CHANGED:
             if kwargs["mode"] == "calibration":
                 self.setup_charuco_board()
                 self.reset()
                 self.is_active = True
             else:
                 self.is_active = False
+
+        if not self.is_active:
+            return
+
+        if event == Event.CAMERA_SELECTED:
+            if len(self.calibration_datapoints) != 0:
+                logging.error("Calibration resetted because of camera switch.")
+                self.reset()
+            self.camera: Camera | None = kwargs["camera"]
+            self.setup_charuco_board()
 
     def reset(self) -> None:
         self.calibration_datapoints.clear()
@@ -319,13 +323,13 @@ class CameraCalibrator(Observer):
             )
         return img
 
-    def setup_charuco_board(self, mock=False):
+    def setup_charuco_board(self):
         width = self._scene.background.screen_width
         width_m = self._scene.background.screen_width_m
         height = self._scene.background.screen_height
         height_m = self._scene.background.screen_height_m
 
-        if mock:
+        if isinstance(self.camera, DemoCam):
             # overwrite to monitor from lab (old demo data)
             logging.warn("USING MOCK MONITOR DIMENSIONS")
             height = 2160

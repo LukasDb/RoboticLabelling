@@ -101,6 +101,7 @@ class App:
 
     def _on_tab_change(self):
         open_tab = self.tabs.select()
+        logging.debug(f"Tab changed to {open_tab}")
         if "viewposeregistration" in open_tab:
             self.scene.change_mode("registration")
         elif "viewcalibration" in open_tab:

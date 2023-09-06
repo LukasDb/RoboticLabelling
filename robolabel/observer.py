@@ -8,8 +8,10 @@ class Event(Enum):
     CAMERA_CALIBRATED = auto()
     CAMERA_ATTACHED = auto()
     CAMERA_SELECTED = auto()
+
     OBJECT_ADDED = auto()
     OBJECT_REGISTERED = auto()
+    OBJECT_SELECTED = auto()
     OBJECT_REMOVED = auto()
     ROBOT_ADDED = auto()
     MODE_CHANGED = auto()
@@ -22,8 +24,11 @@ class Observable:
     def register(self, observer):
         self.__observers.add(observer)
 
+    def unregister(self, observer):
+        self.__observers.remove(observer)
+
     def notify(self, event: Event, *args, **kwargs):
-        logging.debug(f"[{self}]: {event}")
+        logging.debug(f"[{self}]: {event}; {args}, {kwargs}")
         for observer in self.__observers:
             observer.update_observer(self, event, *args, **kwargs)
 
@@ -31,6 +36,9 @@ class Observable:
 class Observer:
     def listen_to(self, subject: Observable):
         subject.register(self)
+
+    def stop_listening(self, subject: Observable):
+        subject.unregister(self)
 
     def update_observer(self, subject: Observable, event: Event, *args, **kwargs):
         pass

@@ -1,6 +1,6 @@
 import numpy as np
 import open3d as o3d
-import os
+import asyncio
 from tqdm import tqdm
 from scipy.spatial.transform import Rotation as R
 import cv2
@@ -9,8 +9,10 @@ from dataclasses import dataclass
 from scipy import optimize
 import logging
 
+from robolabel.operators import TrajectoryGenerator, TrajectorySettings, Acquisition
 from robolabel.observer import Event, Observable, Observer
 from robolabel.scene import Scene
+from robolabel.camera import Camera
 from robolabel.labelled_object import LabelledObject
 from robolabel.lib.geometry import (
     invert_homogeneous,
@@ -34,9 +36,11 @@ class PoseRegistrator(Observer):
         super().__init__()
         # TODO set lighting to standard lighting
         self._scene = scene
+        self.listen_to(self._scene)
         self.is_active = False
         self.mesh_cache = {}
         self.datapoints: List[Datapoint] = []
+        self.trajectory_generator = TrajectoryGenerator()
 
     def update_observer(self, subject: Observable, event: Event, *args, **kwargs):
         if event == Event.MODE_CHANGED:
@@ -49,7 +53,7 @@ class PoseRegistrator(Observer):
     def reset(self) -> None:
         self.datapoints.clear()
 
-    def capture_image(self) -> Datapoint | None:
+    def capture(self) -> Datapoint | None:
         if self._scene.selected_camera is None:
             logging.error("No camera selected")
             return None
@@ -75,6 +79,41 @@ class PoseRegistrator(Observer):
 
         self.datapoints.append(datapoint)
         return datapoint
+
+    async def capture_images(self, callback) -> None:
+        if self._scene.selected_camera is None:
+            logging.error("No camera selected")
+            return None
+
+        trajectory_settings = TrajectorySettings(
+            n_steps=20, view_jitter=0.0, z_cutoff=0.4, r_range=(0.45, 0.5)
+        )
+        obj = self._scene.selected_object
+        if obj is None:
+            logging.error("No object selected")
+            return
+        center = obj.pose[:3, 3]
+
+        trajectory = self.trajectory_generator.generate_trajectory_above_center(
+            center, trajectory_settings
+        )
+        acquisition = Acquisition()
+
+        self.trajectory_generator.visualize_trajectory(self._scene.selected_camera, [])
+
+        logging.debug("Starting acquisition for calibration...")
+
+        i = 0
+        async for _ in acquisition.execute([self._scene.selected_camera], trajectory):
+            i += 1
+            logging.debug(f"Reached {i}/{len(trajectory)}")
+            if callback is not None:
+                callback()
+            await asyncio.sleep(0.1)  # update GUI
+            self.capture()
+
+        if callback is not None:
+            callback()
 
     def optimize_pose(self) -> None:
         obj = self._scene.selected_object
@@ -144,14 +183,36 @@ class PoseRegistrator(Observer):
     def move_pose(self, obj: LabelledObject, x, y, z, rho, phi, theta):
         obj.pose = get_affine_matrix_from_euler([rho, phi, theta], [x, y, z])
 
-    def draw_on_preview(self, rgb, cam_pose, cam_intrinsics, cam_dist_coeffs):
+    def get_from_image_cache(self, index):
+        try:
+            datapoint: Datapoint = self.datapoints[index]
+        except IndexError:
+            return None
+
+        img = datapoint.rgb.copy()
+        if self._scene.selected_object is not None:
+            img = self.draw_registered_object(
+                self._scene.selected_object,
+                img,
+                datapoint.pose,
+                datapoint.intrinsics,
+                datapoint.dist_coeffs,
+            )
+
+        return img
+
+    def draw_on_preview(self, cam: Camera, rgb: np.ndarray):
         if not self.is_active:
+            return rgb
+
+        if not cam.is_calibrated():
+            print("not calibrated")
             return rgb
 
         for obj in self._scene.objects.values():
             if not obj.registered:
                 continue
-            self.draw_registered_object(obj, rgb, cam_pose, cam_intrinsics, cam_dist_coeffs)
+            self.draw_registered_object(obj, rgb, cam.pose, cam.intrinsic_matrix, cam.dist_coeffs)
         return rgb
 
     def draw_registered_object(

@@ -43,6 +43,7 @@ class Scene(Observable):
 
     def select_object_by_name(self, name):
         self.selected_object = self.objects[name]
+        self.notify(Event.OBJECT_SELECTED, object=self.selected_object)
 
     def change_mode(self, mode: Literal["acquisition", "calibration", "registration"]):
         self.mode = mode
