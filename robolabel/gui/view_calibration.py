@@ -43,19 +43,22 @@ class ViewCalibration(ttk.Frame):
             command=self.calibrator.setup,
         )
 
-        self.capture_button = ttk.Button(
-            control_frame, text="Capture Image", command=self.capture_image
-        )
+        self.capture_button = ttk.Button(control_frame, text="Capture", command=self.capture_image)
 
         self.automatic_button = ttk.Button(
             control_frame,
-            text="Run automatic acquisition",
+            text="Auto Capture",
             command=self.on_automatic_acquisition,
+        )
+        self.cancel_button = ttk.Button(
+            control_frame,
+            text="Cancel",
+            command=lambda: self.calibrator.acquisition.cancel(),
         )
 
         self.clear_button = ttk.Button(
             control_frame,
-            text="Delete Captured Images",
+            text="Reset",
             command=self.on_delete,
         )
 
@@ -70,12 +73,15 @@ class ViewCalibration(ttk.Frame):
             command=self.calibrator.calibrate,
         )
 
+        guess_frame = ttk.Frame(control_frame)
+
         def sb_pos() -> ttk.Spinbox:
             spinbox = ttk.Spinbox(
-                control_frame,
+                guess_frame,
                 from_=-1.0,
                 to=1.0,
                 increment=0.01,
+                width=5,
                 command=lambda: self._change_initial_guess(),
             )
             # bind self._on_change to spinbox
@@ -86,22 +92,29 @@ class ViewCalibration(ttk.Frame):
         self.guess_y = sb_pos()
         self.guess_z = sb_pos()
 
+        pady = 5
+        self.guess_x.grid(pady=pady, row=0, column=0)
+        self.guess_y.grid(pady=pady, row=0, column=1)
+        self.guess_z.grid(pady=pady, row=0, column=2)
+
         self.guess_x.set(0.367)
         self.guess_y.set(-0.529)
         self.guess_z.set(-0.16)
 
         self._change_initial_guess()
 
-        pady = 5
-        self.btn_setup.grid(pady=pady)
-        self.capture_button.grid(pady=pady)
-        self.automatic_button.grid(pady=pady)
-        self.clear_button.grid(pady=pady)
-        self.image_selection.grid(pady=pady)
-        self.guess_x.grid(pady=pady)
-        self.guess_y.grid(pady=pady)
-        self.guess_z.grid(pady=pady)
-        self.calibrate_button.grid(pady=pady)
+        self.btn_setup.grid(pady=pady, row=0, column=0)
+        self.capture_button.grid(pady=pady, row=0, column=1)
+
+        self.automatic_button.grid(pady=pady, row=1, column=0)
+        self.cancel_button.grid(pady=pady, row=1, column=1)
+
+        self.image_selection.grid(pady=pady, row=2, column=0)
+        self.clear_button.grid(pady=pady, row=2, column=1)
+
+        guess_frame.grid(pady=pady, row=3, column=0, columnspan=3)
+
+        self.calibrate_button.grid(pady=pady, row=4, column=0, columnspan=3)
 
         return control_frame
 

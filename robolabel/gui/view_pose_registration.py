@@ -19,14 +19,15 @@ class ViewPoseRegistration(Observer, ttk.Frame):
         self.title = ttk.Label(self, text="2. Pose Registration")
         self.title.grid(columnspan=2)
 
+        self.columnconfigure(0, weight=1)
+        self.columnconfigure(1, minsize=300, weight=1)
+        self.rowconfigure(1, weight=1)
+
         controls = self.setup_controls(self)
         self.preview = ResizableImage(self, bg="#000000")
 
         controls.grid(row=1, column=1, sticky=tk.NSEW)
         self.preview.grid(row=1, column=0, sticky=tk.NSEW)
-
-        self.columnconfigure(0, weight=1)
-        self.columnconfigure(1, minsize=300, weight=1)
 
     def update_observer(self, subject: Observable, event: Event, *args, **kwargs):
         if event == Event.OBJECT_ADDED:
@@ -53,8 +54,13 @@ class ViewPoseRegistration(Observer, ttk.Frame):
 
         self.auto_capture_button = ttk.Button(
             control_frame,
-            text="Run automatic acquisition",
+            text="Auto Capture",
             command=self._on_automatic_acquisition,
+        )
+        self.cancel_button = ttk.Button(
+            control_frame,
+            text="Cancel",
+            command=lambda: self.registrator.acquisition.cancel(),
         )
 
         self.image_selection = ttk.Combobox(control_frame)
@@ -121,19 +127,20 @@ class ViewPoseRegistration(Observer, ttk.Frame):
         self.manual_pose_theta = sb_rot(3)
 
         pady = 5
-        pady_L = 20
 
         # control frame
-        self.capture_button.grid(pady=pady)
-        self.auto_capture_button.grid(pady=pady)
-        self.image_selection.grid(pady=pady)
+        self.capture_button.grid(pady=pady, row=0, columnspan=2)
 
-        pose_frame.grid(pady=pady_L)
+        self.auto_capture_button.grid(pady=pady, row=1, column=0)
+        self.cancel_button.grid(pady=pady, row=1, column=1)
 
-        self.optimize_button.grid(pady=pady_L)
+        self.image_selection.grid(pady=pady, row=2, column=0)
+        self.reset_button.grid(pady=pady, row=2, column=1)
 
-        self.reset_pose_button.grid(pady=pady)
-        self.reset_button.grid(pady=pady)
+        pose_frame.grid(pady=pady, row=3, columnspan=2)
+
+        self.optimize_button.grid(pady=pady, row=4, column=0)
+        self.reset_pose_button.grid(pady=pady, row=4, column=1)
 
         return control_frame
 

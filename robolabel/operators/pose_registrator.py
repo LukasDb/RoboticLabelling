@@ -41,6 +41,7 @@ class PoseRegistrator(Observer):
         self.mesh_cache = {}
         self.datapoints: List[Datapoint] = []
         self.trajectory_generator = TrajectoryGenerator()
+        self.acquisition = Acquisition()
 
     def update_observer(self, subject: Observable, event: Event, *args, **kwargs):
         if event == Event.MODE_CHANGED:
@@ -97,19 +98,17 @@ class PoseRegistrator(Observer):
         trajectory = self.trajectory_generator.generate_trajectory_above_center(
             center, trajectory_settings
         )
-        acquisition = Acquisition()
 
         self.trajectory_generator.visualize_trajectory(self._scene.selected_camera, [])
 
         logging.debug("Starting acquisition for calibration...")
 
         i = 0
-        async for _ in acquisition.execute([self._scene.selected_camera], trajectory):
+        async for _ in self.acquisition.execute([self._scene.selected_camera], trajectory):
             i += 1
             logging.debug(f"Reached {i}/{len(trajectory)}")
             if callback is not None:
                 callback()
-            await asyncio.sleep(0.1)  # update GUI
             self.capture()
 
         if callback is not None:

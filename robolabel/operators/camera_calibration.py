@@ -47,7 +47,7 @@ class CameraCalibrator(Observer):
         self.camera: Camera | None = None
         self.markers2monitor = np.eye(4)
         self.trajectory_generator = TrajectoryGenerator()
-
+        self.acquisition = Acquisition()
         self.setup_charuco_board()
 
     def update_observer(self, subject: Observable, event: Event, *args, **kwargs):
@@ -151,19 +151,17 @@ class CameraCalibrator(Observer):
         trajectory = self.trajectory_generator.generate_trajectory_above_center(
             self.initial_guess, trajectory_settings
         )
-        acquisition = Acquisition()
 
         self.trajectory_generator.visualize_trajectory(self.camera, [])
 
         logging.debug("Starting acquisition for calibration...")
 
         i = 0
-        async for _ in acquisition.execute([self.camera], trajectory):
+        async for _ in self.acquisition.execute([self.camera], trajectory):
             i += 1
             logging.debug(f"Reached {i}/{len(trajectory)}")
             if cb is not None:
                 cb()
-            await asyncio.sleep(0.1)  # update GUI
             self.capture()
 
         if cb is not None:

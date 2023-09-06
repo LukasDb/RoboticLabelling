@@ -66,6 +66,11 @@ class Acquisition:
             return
         logging.info("Reached home pose")
 
+        await asyncio.sleep(0.2)
+        if self._cancelled:
+            self._cancelled = False
+            return
+
         for idx_trajectory, pose in enumerate(trajectory):
             # generate randomized bg and lights settings, to be re-used for all cameras
 
