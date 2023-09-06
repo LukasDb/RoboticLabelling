@@ -1,26 +1,31 @@
 import tkinter as tk
 from PIL import ImageTk, Image
 import numpy as np
+import numpy.typing as npt
 import cv2
-from typing import Literal
+from typing import Literal, Any
 
 
 class ResizableImage(tk.Canvas):
     def __init__(
-        self, master, image=None, mode: Literal["stretch", "zoom", "fit"] = "fit", **kwargs
+        self,
+        master: tk.Misc,
+        image: None | npt.NDArray[np.uint8] = None,
+        mode: Literal["stretch", "zoom", "fit"] = "fit",
+        **kwargs,
     ):
-        tk.Canvas.__init__(self, master, **kwargs)
+        tk.Canvas.__init__(self, master, kwargs)
         self._canvas_img = self.create_image(0, 0, anchor=tk.NW)
-        self._img = None
+        self._img: npt.NDArray[np.uint8] | None = None
         self.mode = mode
         if image is not None:
             self._img = image.copy()
-        self.bind("<Configure>", self._on_refresh)
+        self.bind(sequence="<Configure>", func=self._on_refresh)
 
     def _on_refresh(self, event=None):
         if event is not None:
-            self.widget_width = event.width
-            self.widget_height = event.height
+            self.widget_width = int(event.width)
+            self.widget_height = int(event.height)
 
         if self._img is None or not hasattr(self, "widget_width"):
             return
@@ -49,7 +54,7 @@ class ResizableImage(tk.Canvas):
         self._img_tk = ImageTk.PhotoImage(Image.fromarray(img_resized))
         self.itemconfig(self._canvas_img, image=self._img_tk)  # , anchor=tk.CENTER)
 
-    def set_image(self, image):
+    def set_image(self, image: np.ndarray):
         self._img = image
         if self._canvas_img not in self.children:
             self._canvas_img = self.create_image(0, 0, anchor=tk.NW)

@@ -1,20 +1,20 @@
 from abc import ABC, abstractmethod, abstractproperty
-
-from ..entity import Entity
-from ..observer import Observable, Event
-from ..robot import Robot
 from dataclasses import dataclass
 import numpy as np
-from typing import Dict
 from enum import Enum, auto
+import numpy.typing as npt
+
+
+import robolabel as rl
+from robolabel import Event, Entity
 
 
 @dataclass
 class CamFrame:
-    rgb: np.ndarray | None = None
-    rgb_R: np.ndarray | None = None
-    depth: np.ndarray | None = None
-    depth_R: np.ndarray | None = None
+    rgb: npt.NDArray[np.float64] | None = None
+    rgb_R: npt.NDArray[np.float64] | None = None
+    depth: npt.NDArray[np.float64] | None = None
+    depth_R: npt.NDArray[np.float64] | None = None
 
 
 class DepthQuality(Enum):
@@ -30,31 +30,34 @@ class DepthQuality(Enum):
     UNCHANGED = auto()
 
 
-class Camera(Entity, Observable, ABC):
+class Camera(Entity, rl.Observable, ABC):
     width: int
     height: int
 
     def __init__(self, name: str):
         Entity.__init__(self, name)
-        Observable.__init__(self)
+        rl.Observable.__init__(self)
 
-        self.robot: Robot | None = None
-        self._extrinsics: np.ndarray | None = None
-        self._intrinsics: np.ndarray | None = None
-        self._dist_coeffs: np.ndarray | None = None
+        self.robot: rl.robot.Robot | None = None
+        import numpy.typing
+
+        self._extrinsics: numpy.typing.NDArray[np.float64] | None = None
+        self._intrinsics: npt.NDArray[np.float64] | None = None
+        self._dist_coeffs: npt.NDArray[np.float64] | None = None
 
     @property
-    def pose(self) -> np.ndarray:
+    async def pose(self) -> npt.NDArray[np.float64]:
         if self.robot is None or self._extrinsics is None:
             pose = self._pose
         else:
-            pose = self.robot.pose @ self._extrinsics
+            pose = await self.robot.pose @ self._extrinsics
         return pose
 
-    def attach(self, robot: Robot, link_matrix: np.ndarray):
+    async def attach(self, robot: rl.robot.Robot, link_matrix: npt.NDArray[np.float64]):
         self.robot = robot
         self._extrinsics = link_matrix
-        self._pose = self.robot.pose @ self._extrinsics
+        robot_pose = await self.robot.pose
+        self._pose = robot_pose @ self._extrinsics
         self.notify(Event.CAMERA_ATTACHED)
 
     def detach(self):
@@ -78,7 +81,7 @@ class Camera(Entity, Observable, ABC):
         return self._extrinsics
 
     @property
-    def dist_coeffs(self):
+    def dist_coefficients(self):
         assert self._dist_coeffs is not None
         return self._dist_coeffs
 
@@ -91,9 +94,9 @@ class Camera(Entity, Observable, ABC):
 
     def set_calibration(
         self,
-        intrinsic_matrix: np.ndarray,
-        dist_coeffs: np.ndarray,
-        extrinsic_matrix: np.ndarray,
+        intrinsic_matrix: npt.NDArray[np.float64],
+        dist_coeffs: npt.NDArray[np.float64],
+        extrinsic_matrix: npt.NDArray[np.float64],
     ):
         self._intrinsics = intrinsic_matrix
         self._dist_coeffs = dist_coeffs

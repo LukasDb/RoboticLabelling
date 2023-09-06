@@ -1,6 +1,19 @@
 import numpy as np
 import numpy.typing as npt
 from scipy.spatial.transform import Rotation as R
+import asyncio
+from typing import Callable, Any
+
+
+def as_async_task(coro: Callable[..., Any]) -> Callable[..., asyncio.Task[Any]]:
+    def async_wrapper(*args: Any, **kwargs: Any) -> asyncio.Task[Any]:
+        if asyncio.get_event_loop().is_running():
+            task = asyncio.create_task(coro(*args, **kwargs))
+        else:
+            task = asyncio.get_event_loop().run_until_complete(coro(*args, **kwargs))
+        return task
+
+    return async_wrapper
 
 
 class Entity:
@@ -8,22 +21,18 @@ class Entity:
 
     def __init__(self, name: str):
         self.name = name
-        self._pose: npt.NDArray[np.float64] = np.eye(4)  # global world 2 entity pose
+        self._pose = np.eye(4)  # global world 2 entity pose
 
-    def set_position(self, position: npt.NDArray[np.float64]):
-        self.pose[:3, 3] = position
+    async def get_position(self) -> npt.NDArray[np.float64]:
+        pose = await self.pose
+        return pose[:3, 3]
 
-    def set_orientation(self, orientation: R) -> None:
-        self.pose[:3, :3] = orientation.as_matrix()
-
-    def get_position(self) -> npt.NDArray[np.float64]:
-        return self.pose[:3, 3]
-
-    def get_orientation(self) -> R:
-        return R.from_matrix(self.pose[:3, :3])
+    async def get_orientation(self) -> R:
+        pose = await self.pose
+        return R.from_matrix(pose[:3, :3])
 
     @property
-    def pose(self) -> npt.NDArray[np.float64]:
+    async def pose(self) -> npt.NDArray[np.float64]:
         return self._pose
 
     @pose.setter

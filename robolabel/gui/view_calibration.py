@@ -7,16 +7,14 @@ import numpy as np
 import cv2
 import time
 
-from robolabel.scene import Scene
-from robolabel.operators import CameraCalibrator
-from ..lib.resizable_image import ResizableImage
+import robolabel as rl
 
 
 class ViewCalibration(ttk.Frame):
     PREVIEW_WIDTH = 640
     PREVIEW_HEIGHT = 480
 
-    def __init__(self, master, scene: Scene, calibrator: CameraCalibrator) -> None:
+    def __init__(self, master, scene: rl.Scene, calibrator: rl.operators.CameraCalibrator) -> None:
         ttk.Frame.__init__(self, master)
         self.scene = scene
         self.calibrator = calibrator
@@ -122,11 +120,12 @@ class ViewCalibration(ttk.Frame):
         preview_frame = ttk.Frame(self)
         preview_frame.rowconfigure(0, weight=1)
         preview_frame.columnconfigure(0, weight=1)
-        self.selected_image_canvas = ResizableImage(preview_frame, bg="#000000")
+        self.selected_image_canvas = rl.ResizableImage(preview_frame, bg="#000000")
         self.selected_image_canvas.grid(sticky=tk.NSEW)
         return preview_frame
 
-    def _update_gui(self, set_to_last_image=False):
+    @rl.as_async_task
+    async def _update_gui(self, set_to_last_image=False):
         if len(self.calibrator.calibration_datapoints) == 0:
             return
         self.image_selection["values"] = [
@@ -141,18 +140,18 @@ class ViewCalibration(ttk.Frame):
         except ValueError:
             return
 
-        img = self.calibrator.get_from_image_cache(selected_index)
+        img = await self.calibrator.get_from_image_cache(selected_index)
         if img is not None:
             self.selected_image_canvas.set_image(img)
 
-    def capture_image(self):
-        self.calibrator.capture()
+    @rl.as_async_task
+    async def capture_image(self):
+        await self.calibrator.capture()
         self._update_gui(set_to_last_image=True)
 
-    def on_automatic_acquisition(self):
-        asyncio.get_event_loop().create_task(
-            self.calibrator.capture_images(lambda: self._update_gui(set_to_last_image=True))
-        )
+    @rl.as_async_task
+    async def on_automatic_acquisition(self):
+        await self.calibrator.capture_images(lambda: self._update_gui(set_to_last_image=True))
 
     def on_delete(self):
         self.calibrator.reset()

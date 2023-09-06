@@ -10,34 +10,29 @@ import time
 import cv2
 import dataclasses
 
-from robolabel.scene import Scene
-from robolabel.labelled_object import LabelledObject
-from robolabel.camera import DepthQuality
-from robolabel.observer import Observer, Event
-from ..lib.resizable_image import ResizableImage
-from ..lib.widget_list import WidgetList
-from robolabel.operators import CameraCalibrator, PoseRegistrator
+import robolabel as rl
+from robolabel import Event
 
 
-class Overview(Observer, tk.Frame):
+class Overview(rl.Observer, tk.Frame):
     def __init__(
         self,
         master,
-        scene: Scene,
-        calibrator: CameraCalibrator,
-        registrator: PoseRegistrator,
+        scene: rl.Scene,
+        calibrator: rl.operators.CameraCalibrator,
+        registration: rl.operators.PoseRegistration,
     ) -> None:
         tk.Frame.__init__(self, master)
-        Observer.__init__(self)
+        rl.Observer.__init__(self)
         self._scene = scene
         self._calibrator = calibrator
-        self._registrator = registrator
+        self._registration = registration
         self.listen_to(self._scene)
 
         self._selected_stream = tk.StringVar()
 
-        self.cam_list: WidgetList
-        self.object_list: WidgetList
+        self.cam_list: rl.WidgetList
+        self.object_list: rl.WidgetList
 
         self.title = ttk.Label(self, text="Overview")
         self.controls = self.setup_controls(self)
@@ -54,6 +49,7 @@ class Overview(Observer, tk.Frame):
 
         self._update_cam_table()
         self._update_object_table()
+
         cams = [c.unique_id for c in self._scene.cameras.values()]
         self.camera_selection.configure(values=cams)
         # listen to all cameras
@@ -63,8 +59,14 @@ class Overview(Observer, tk.Frame):
         self.camera_selection.set(cams[-1])
         self._on_camera_selection_change(None)
 
+        objs = [c.name for c in self._scene.objects.values()]
+        if len(objs) > 0:
+            self.object_selection.configure(values=objs)
+            self.object_selection.set(objs[-1])
+            self._on_object_selected(None)
+
         self.t_previous = time.perf_counter()
-        self.FPS = 10
+        self.FPS = 20
 
         # register task for updating the preview
         self.preview_task = asyncio.get_event_loop().create_task(
@@ -86,13 +88,16 @@ class Overview(Observer, tk.Frame):
         ]:
             # update calibrated column
             self._update_cam_table()
-            for cam in self._scene.cameras.values():
-                self.listen_to(cam)
+            if event == Event.CAMERA_ADDED:
+                self.listen_to(kwargs["camera"])
+
             available_cameras = [c.unique_id for c in self._scene.cameras.values()]
             self.camera_selection.configure(values=available_cameras)
 
         elif event in [Event.OBJECT_REMOVED, Event.OBJECT_REGISTERED, Event.OBJECT_ADDED]:
             self._update_object_table()
+            available_objects = [o.name for o in self._scene.objects.values()]
+            self.object_selection.configure(values=available_objects)
             if event == Event.OBJECT_ADDED:
                 self.listen_to(kwargs["object"])
             elif event == Event.OBJECT_REMOVED:
@@ -138,15 +143,15 @@ class Overview(Observer, tk.Frame):
         self.capture_name.grid(row=0, column=0)
         capture_button.grid(row=0, column=1)
 
-        self.cam_list = WidgetList(
+        self.cam_list = rl.WidgetList(
             control_frame,
             column_names=["Camera", "Calibrated?", "Attached"],
             columns=[tk.Label, tk.Label, ttk.Combobox],
         )
-        self.object_list = WidgetList(
+        self.object_list = rl.WidgetList(
             control_frame,
-            column_names=["Object", "Registered?", "Color", "Remove"],
-            columns=[tk.Label, tk.Label, tk.Label, ttk.Button],
+            column_names=["Object", "Color", "Remove"],
+            columns=[tk.Label, tk.Label, ttk.Button],
         )
 
         cam_select_frame.grid(sticky=tk.NSEW, pady=10)
@@ -160,11 +165,11 @@ class Overview(Observer, tk.Frame):
         preview_frame = ttk.Frame(master)
         preview_frame.columnconfigure(0, weight=1)
         preview_frame.rowconfigure(0, weight=1)
-        self.live_canvas = ResizableImage(preview_frame, bg="#000000")
+        self.live_canvas = rl.ResizableImage(preview_frame, bg="#000000")
         self.live_canvas.grid(sticky=tk.NSEW)
         return preview_frame
 
-    def _on_capture(self):
+    async def _on_capture(self):
         # save image for use in demo cam + robot pose
         data_name = self.capture_name.get()
         if data_name == "":
@@ -184,9 +189,9 @@ class Overview(Observer, tk.Frame):
             return
         idx = len(list(data_folder.glob("images/*.png")))
 
-        frame = cam.get_frame(depth_quality=DepthQuality.INFERENCE)
+        frame = cam.get_frame(depth_quality=rl.camera.DepthQuality.INFERENCE)
         if cam.robot is not None:
-            robot_pose = cam.robot.pose
+            robot_pose = await cam.robot.pose
             np.savetxt(str(data_folder / f"poses/{idx}.txt"), robot_pose)
         if frame.rgb is not None:
             cv2.imwrite(  # type: ignore
@@ -230,10 +235,6 @@ class Overview(Observer, tk.Frame):
         for i, obj in enumerate(self._scene.objects.values()):
             kwargs_list = [
                 {"text": obj.name},  # obj_name
-                {
-                    "text": "Yes" if obj.registered else "No",
-                    "fg": "green" if obj.registered else "red",
-                },  # registered
                 {"bg": "#%02x%02x%02x" % tuple(obj.semantic_color)},  # w_color
                 {"text": "x", "command": lambda obj=obj: self._scene.remove_object(obj)},
             ]
@@ -244,7 +245,7 @@ class Overview(Observer, tk.Frame):
             except IndexError:
                 row_widgets = self.object_list.add_new_row(kwargs_list)
 
-            _, _, w_color, _ = row_widgets
+            _, w_color, _ = row_widgets
 
             w_color.bind(
                 "<Button-1>",
@@ -254,7 +255,8 @@ class Overview(Observer, tk.Frame):
         for i in range(len(self._scene.objects), len(self.object_list.rows)):
             self.object_list.pop(i)
 
-    def _on_attach_cam(self, cam_unique_id, w_robot):
+    @rl.as_async_task
+    async def _on_attach_cam(self, cam_unique_id, w_robot):
         cam = self._scene.cameras[cam_unique_id]
 
         if w_robot.get() == "-":
@@ -262,7 +264,7 @@ class Overview(Observer, tk.Frame):
         else:
             robot = self._scene.robots[w_robot.get()]
             link_mat = cam.extrinsic_matrix if cam.is_calibrated() else np.eye(4)
-            cam.attach(robot, link_mat)
+            await cam.attach(robot, link_mat)
 
     def _on_camera_selection_change(self, _):
         selected = self.camera_selection.get()
@@ -274,15 +276,19 @@ class Overview(Observer, tk.Frame):
 
     async def live_preview(self):
         self.t_previous_frame = time.perf_counter()
+        self.previous_dts = [1 / self.FPS] * 10
         while True:
             # framerate limiter
             t = time.perf_counter()
             if (t - self.t_previous) < 1 / self.FPS:
                 await asyncio.sleep(1 / self.FPS - (t - self.t_previous))
             self.t_previous = time.perf_counter()
-            self.show_single_frame()
 
-    def show_single_frame(self):
+            await self.show_single_frame()
+            # if we don't update the GUI in this loop, the FPS does not reflect the actual screen FPS
+            self.live_canvas.update()
+
+    async def show_single_frame(self):
         selected_cam = self._scene.selected_camera
 
         if selected_cam is None:
@@ -291,7 +297,7 @@ class Overview(Observer, tk.Frame):
 
         try:
             # don't change otherwise running a task will trigger constant switching
-            frame = selected_cam.get_frame(depth_quality=DepthQuality.UNCHANGED)
+            frame = selected_cam.get_frame(depth_quality=rl.camera.DepthQuality.UNCHANGED)
         except Exception as e:
             logging.error(f"Failed to get frame from camera: {e}")
             return
@@ -312,14 +318,15 @@ class Overview(Observer, tk.Frame):
             preview = self._color_depth(preview)
 
         if "_R" not in stream_name:
-            preview = self._calibrator.draw_on_preview(selected_cam, preview)
-            preview = self._registrator.draw_on_preview(
-                selected_cam,
-                preview,
-            )
+            preview = await self._calibrator.draw_on_preview(selected_cam, preview)
+            preview = await self._registration.draw_on_preview(selected_cam, preview)
 
         # draw FPS in top left cornere
-        fps = 1 / (time.perf_counter() - self.t_previous_frame)
+        dt = time.perf_counter() - self.t_previous_frame
+        self.previous_dts.pop()
+        self.previous_dts.insert(0, dt)
+        fps = 1 / np.mean(self.previous_dts)
+
         self.t_previous_frame = time.perf_counter()
         cv2.putText(  # type: ignore
             preview,
@@ -342,7 +349,7 @@ class Overview(Observer, tk.Frame):
             cv2.COLOR_BGR2RGB,  # type: ignore
         )
 
-    def _on_object_color_click(self, obj: LabelledObject):
+    def _on_object_color_click(self, obj: rl.LabelledObject):
         colors = askcolor(title="Object Semantic Color")
         obj.semantic_color = colors[0]
         self._update_object_table()

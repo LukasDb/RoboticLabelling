@@ -1,57 +1,59 @@
-import pickle
 import numpy as np
-import asyncio
-from pathlib import Path
 import cv2
-from typing import List, Dict, Callable
-from robolabel.scene import Scene
-from robolabel.lib.geometry import invert_homogeneous, get_affine_matrix_from_6d_vector
-from robolabel.observer import Event, Observable, Observer
-from robolabel.camera import Camera, DepthQuality, DemoCam
-from robolabel.operators import Acquisition, TrajectoryGenerator, TrajectorySettings
-import cv2
-from tqdm import tqdm
 from cv2 import aruco  # type: ignore
 from scipy import optimize
 import logging
 import dataclasses
+import numpy.typing as npt
+from typing import Callable, Any
+
+import robolabel as rl
+from robolabel import Event
+from robolabel.lib.geometry import (
+    invert_homogeneous,
+    get_affine_matrix_from_6d_vector,
+)
 
 
 @dataclasses.dataclass
 class CalibrationDatapoint:
-    img: np.ndarray
-    robot_pose: np.ndarray | None
+    img: npt.NDArray[np.uint8]
+    robot_pose: npt.NDArray[np.float64] | None
     detected: bool = False
-    estimated_pose6d: np.ndarray | None = None
-    corners: list = dataclasses.field(default_factory=lambda: [])
-    inter_corners: list = dataclasses.field(default_factory=lambda: [])
-    ids: list = dataclasses.field(default_factory=lambda: [])
-    inter_ids: list = dataclasses.field(default_factory=lambda: [])
+    estimated_pose6d: npt.NDArray[np.float64] | None = None
+    corners: list[tuple[int]] = dataclasses.field(default_factory=lambda: [])
+    inter_corners: list[tuple[float]] = dataclasses.field(default_factory=lambda: [])
+    ids: list[list[int]] = dataclasses.field(default_factory=lambda: [])
+    inter_ids: list[list[int]] = dataclasses.field(default_factory=lambda: [])
 
 
-class CameraCalibrator(Observer):
-    CHESSBOARD_SIZE = 0.05
-    MARKER_SIZE = 0.04
-    MARKERS = (7, 5)
-    CHARUCO_DICT = aruco.DICT_6X6_250
-
-    def __init__(self, scene: Scene):
+class CameraCalibrator(rl.Observer):
+    def __init__(self, scene: rl.Scene):
         # needs to be persistent (which is not the case here)
         super().__init__()
         self._scene = scene
         self.listen_to(self._scene)
 
+        self.chessboard_size = 0.05
+        self.marker_size = 0.04
+        self.MARKERS = (7, 5)
+        self.CHARUCO_DICT: Any = aruco.DICT_6X6_250
+
         self.is_active = False
         self.calibration_datapoints: list[CalibrationDatapoint] = []
         self.mock_i = 0
-        self.camera: Camera | None = None
+        self.camera: rl.camera.Camera | None = None
         self.markers2monitor = np.eye(4)
-        self.trajectory_generator = TrajectoryGenerator()
-        self.acquisition = Acquisition()
+        self.trajectory_generator = rl.operators.TrajectoryGenerator()
+        self.acquisition = rl.operators.Acquisition()
         self.setup_charuco_board()
 
-    def update_observer(self, subject: Observable, event: Event, *args, **kwargs):
+    def update_observer(
+        self, subject: rl.Observable, event: Event, *args: list[Any], **kwargs: dict[str, Any]
+    ):
         if event == Event.MODE_CHANGED:
+            assert "mode" in kwargs
+            assert isinstance(kwargs["mode"], str)
             if kwargs["mode"] == "calibration":
                 self.setup_charuco_board()
                 self.reset()
@@ -66,30 +68,32 @@ class CameraCalibrator(Observer):
             if len(self.calibration_datapoints) != 0:
                 logging.error("Calibration resetted because of camera switch.")
                 self.reset()
-            self.camera: Camera | None = kwargs["camera"]
+            assert "camera" in kwargs
+            assert isinstance(kwargs["camera"], rl.camera.Camera)
+            self.camera: rl.camera.Camera | None = kwargs["camera"]
             self.setup_charuco_board()
 
     def reset(self) -> None:
         self.calibration_datapoints.clear()
 
-    def load(self, cal_data: Dict) -> None:
+    async def load(self, cal_data: dict[str, Any]) -> None:
         """load calibration from config dict"""
         self._scene.background.pose = np.array(cal_data["background_pose"])
 
         for c in self._scene.cameras.values():
             try:
                 intrinsic_matrix = np.array(cal_data[c.unique_id]["intrinsic"])
-                dist_coeffs = np.array(cal_data[c.unique_id]["dist_coeffs"])
+                dist_coefficients = np.array(cal_data[c.unique_id]["dist_coefficients"])
                 extrinsic_matrix = np.array(cal_data[c.unique_id]["extrinsic"])
                 robot = cal_data[c.unique_id]["attached_to"]
                 if robot != "none":
-                    c.attach(self._scene.robots[robot], extrinsic_matrix)
-                c.set_calibration(intrinsic_matrix, dist_coeffs, extrinsic_matrix)
+                    await c.attach(self._scene.robots[robot], extrinsic_matrix)
+                c.set_calibration(intrinsic_matrix, dist_coefficients, extrinsic_matrix)
             except KeyError:
                 pass
                 # logging.info("No calibration data for camera", c.unique_id)
 
-    def dump(self) -> Dict:
+    async def dump(self) -> dict[str, Any]:
         """dump calibration as config dict"""
         cal_data = {}
         for cam in self._scene.cameras.values():
@@ -98,12 +102,12 @@ class CameraCalibrator(Observer):
 
             cal_data[cam.unique_id] = {
                 "intrinsic": cam.intrinsic_matrix.tolist(),
-                "dist_coeffs": cam.dist_coeffs.tolist(),
+                "dist_coefficients": cam.dist_coefficients.tolist(),
                 "extrinsic": cam.extrinsic_matrix.tolist(),
                 "attached_to": "none" if cam.robot is None else cam.robot.name,
             }
 
-        cal_data.update({"background_pose": self._scene.background.pose.tolist()})
+        cal_data.update({"background_pose": (await self._scene.background.pose).tolist()})
         return cal_data
 
     def setup(self) -> None:
@@ -115,21 +119,20 @@ class CameraCalibrator(Observer):
         self.initial_guess = np.array([x, y, z])
         logging.debug(f"Changed guess for background monitor to {self.initial_guess}")
 
-    def capture(self):
+    async def capture(self):
         if self.camera is None:
             logging.error("No camera selected")
             return
-
-        # since the depth is not used anyway
-        frame = self.camera.get_frame(depth_quality=DepthQuality.FASTEST)
-        assert frame.rgb is not None, "No image captured"
-        img = frame.rgb
-
         if self.camera.robot is None:
             logging.error("Camera is not attached to a robot")
             return
 
-        robot_pose = self.camera.robot.pose
+        # since the depth is not used anyway
+        robot_pose = await self.camera.robot.pose
+        frame = self.camera.get_frame(depth_quality=rl.camera.DepthQuality.FASTEST)
+
+        assert frame.rgb is not None, "No image captured"
+        img = frame.rgb
 
         if img is None:
             logging.error("No image captured")
@@ -145,14 +148,14 @@ class CameraCalibrator(Observer):
 
     async def capture_images(self, cb: Callable | None = None):
         assert self.camera is not None, "No camera selected"
-        trajectory_settings = TrajectorySettings(
+        trajectory_settings = rl.operators.TrajectorySettings(
             n_steps=20, view_jitter=0.0, z_cutoff=0.4, r_range=(0.3, 0.6)
         )
         trajectory = self.trajectory_generator.generate_trajectory_above_center(
             self.initial_guess, trajectory_settings
         )
 
-        self.trajectory_generator.visualize_trajectory(self.camera, [])
+        await self.trajectory_generator.visualize_trajectory(self.camera, [])
 
         logging.debug("Starting acquisition for calibration...")
 
@@ -162,7 +165,7 @@ class CameraCalibrator(Observer):
             logging.debug(f"Reached {i}/{len(trajectory)}")
             if cb is not None:
                 cb()
-            self.capture()
+            await self.capture()
 
         if cb is not None:
             cb()
@@ -185,17 +188,17 @@ class CameraCalibrator(Observer):
 
         assert len(inter_corners) > 0, "No charuco corners detected"
 
-        imsize = (self.camera.height, self.camera.width)
+        image_size = (self.camera.height, self.camera.width)
 
         cameraMatrixInit = np.array(
             [
-                [2500.0, 0.0, imsize[1] / 2.0],
-                [0.0, 2500.0, imsize[0] / 2.0],
+                [2500.0, 0.0, image_size[1] / 2.0],
+                [0.0, 2500.0, image_size[0] / 2.0],
                 [0.0, 0.0, 1.0],
             ]
         )
 
-        distCoeffsInit = np.zeros((5, 1))
+        distCoefficientsInit = np.zeros((5, 1))
         flags = (
             cv2.CALIB_USE_INTRINSIC_GUESS + cv2.CALIB_RATIONAL_MODEL + cv2.CALIB_FIX_ASPECT_RATIO  # type: ignore
         )
@@ -204,7 +207,7 @@ class CameraCalibrator(Observer):
         (
             ret,
             camera_matrix,
-            dist_coeffs,
+            dist_coefficients,
             rvecs,
             tvecs,
             _,
@@ -214,16 +217,18 @@ class CameraCalibrator(Observer):
             charucoCorners=inter_corners,
             charucoIds=inter_ids,
             board=self.charuco_board,
-            imageSize=imsize,
+            imageSize=image_size,
             cameraMatrix=cameraMatrixInit,
-            distCoeffs=distCoeffsInit,
+            distCoeffs=distCoefficientsInit,
             flags=flags,
             criteria=(cv2.TERM_CRITERIA_EPS & cv2.TERM_CRITERIA_COUNT, 10000, 1e-9),  # type: ignore
         )
         assert ret, "Calibration failed"
 
         for cal_result, rvec, tvec in zip(self.calibration_datapoints, rvecs, tvecs):
-            cal_result.estimated_pose6d = np.concatenate([tvec, rvec], axis=0)[:, 0]
+            cal_result.estimated_pose6d = np.concatenate([tvec, rvec], axis=0)[:, 0].astype(
+                np.float64
+            )
 
         logging.info("Done")
 
@@ -262,28 +267,28 @@ class CameraCalibrator(Observer):
         self._scene.background.pose = world2markers @ self.markers2monitor
 
         # set camera atttributes
-        self.camera.set_calibration(camera_matrix, dist_coeffs, extrinsic_matrix)
+        self.camera.set_calibration(camera_matrix, dist_coefficients, extrinsic_matrix)
 
-    def draw_on_preview(self, cam: Camera, rgb: np.ndarray) -> np.ndarray:
+    async def draw_on_preview(self, cam: rl.camera.Camera, rgb: np.ndarray) -> np.ndarray:
         if not self.is_active:
             return rgb
 
-        robot_pose = cam.robot.pose if cam.robot is not None else None
+        robot_pose = await cam.robot.pose if cam.robot is not None else None
 
         calibration_result = self._detect_charuco(rgb, robot_pose)
-        rgb = self._draw_cal_result(cam, calibration_result)
+        rgb = await self._draw_cal_result(cam, calibration_result)
         return rgb
 
-    def get_from_image_cache(self, index) -> np.ndarray | None:
+    async def get_from_image_cache(self, index) -> np.ndarray | None:
         if index is None:
             return None
         if self.camera is None:
             return None
         cal_result: CalibrationDatapoint = self.calibration_datapoints[index]
-        img = self._draw_cal_result(self.camera, cal_result)
+        img = await self._draw_cal_result(self.camera, cal_result)
         return img
 
-    def _draw_cal_result(self, cam: Camera, cal_result: CalibrationDatapoint):
+    async def _draw_cal_result(self, cam: rl.camera.Camera, cal_result: CalibrationDatapoint):
         img = cal_result.img.copy()  # dont change original image in calibration results!
 
         if cal_result.detected:
@@ -299,19 +304,22 @@ class CameraCalibrator(Observer):
 
             # draw optimized calibration result
             world2robot = cal_result.robot_pose
+            assert world2robot is not None, f"Robot pose missing, but camera {cam} is calibrated"
             world2cam = world2robot @ cam.extrinsic_matrix
-            cam2monitor = invert_homogeneous(world2cam) @ monitor.pose
-            monitor.draw_on_rgb(img, cam.intrinsic_matrix, cam.dist_coeffs, cam2monitor)
+            cam2monitor = invert_homogeneous(world2cam) @ (await monitor.pose)
+            monitor.visualize_monitor_in_camera_view(
+                img, cam.intrinsic_matrix, cam.dist_coefficients, cam2monitor
+            )
 
             # draw per-image calibration result
             if cal_result.estimated_pose6d is not None:
                 pose6d = cal_result.estimated_pose6d
                 mat = get_affine_matrix_from_6d_vector("Rodriguez", pose6d)
                 cam2monitor = mat @ self.markers2monitor
-                monitor.draw_on_rgb(
+                monitor.visualize_monitor_in_camera_view(
                     img,
                     cam.intrinsic_matrix,
-                    cam.dist_coeffs,
+                    cam.dist_coefficients,
                     cam2monitor,
                     color=(255, 0, 0),
                 )
@@ -323,7 +331,7 @@ class CameraCalibrator(Observer):
         height = self._scene.background.screen_height
         height_m = self._scene.background.screen_height_m
 
-        if isinstance(self.camera, DemoCam):
+        if isinstance(self.camera, rl.camera.DemoCam):
             # overwrite to monitor from lab (old demo data)
             logging.warn("USING MOCK MONITOR DIMENSIONS")
             height = 2160
@@ -331,19 +339,19 @@ class CameraCalibrator(Observer):
             diagonal_16_by_9 = np.linalg.norm((16, 9))
             width_m = 16 / diagonal_16_by_9 * 0.800
             height_m = 9 / diagonal_16_by_9 * 0.800
-            self.CHESSBOARD_SIZE = 0.0286  # better 0.05 or bigger
-            self.MARKER_SIZE = 0.023
+            self.chessboard_size = 0.0286  # better 0.05 or bigger
+            self.marker_size = 0.023
 
         pixel_w = width_m / width
         pixel_h = height_m / height
         logging.debug(f"Pixel dimensions: {pixel_w} x {pixel_h} m")
 
-        chessboard_size = self.CHESSBOARD_SIZE // pixel_w * pixel_w  # in m
-        marker_size = self.MARKER_SIZE // pixel_w * pixel_w
+        chessboard_size = self.chessboard_size // pixel_w * pixel_w  # in m
+        marker_size = self.marker_size // pixel_w * pixel_w
         n_markers = self.MARKERS  # x,y
 
-        self.aruco_dict = aruco.getPredefinedDictionary(self.CHARUCO_DICT)
-        self.charuco_board = aruco.CharucoBoard.create(
+        self.aruco_dict: Any = aruco.getPredefinedDictionary(self.CHARUCO_DICT)
+        self.charuco_board: Any = aruco.CharucoBoard.create(
             n_markers[0], n_markers[1], chessboard_size, marker_size, self.aruco_dict
         )
 
@@ -379,7 +387,7 @@ class CameraCalibrator(Observer):
         self._scene.background.set_image(charuco_img)
 
         # calculate transform to the center of the screen
-        # same orientation, translated by half of charco width and height
+        # same orientation, translated by half of charuco width and height
         self.markers2monitor = np.eye(4)
         self.markers2monitor[0, 3] = charuco_img_width_m / 2.0
         self.markers2monitor[1, 3] = charuco_img_height_m / 2.0

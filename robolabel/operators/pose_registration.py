@@ -4,21 +4,17 @@ import asyncio
 from tqdm import tqdm
 from scipy.spatial.transform import Rotation as R
 import cv2
-from typing import List
 from dataclasses import dataclass
 from scipy import optimize
 import logging
 
+import robolabel as rl
 from robolabel.operators import TrajectoryGenerator, TrajectorySettings, Acquisition
-from robolabel.observer import Event, Observable, Observer
-from robolabel.scene import Scene
-from robolabel.camera import Camera
-from robolabel.labelled_object import LabelledObject
+from robolabel.observer import Event
 from robolabel.lib.geometry import (
     invert_homogeneous,
     get_affine_matrix_from_euler,
 )
-from robolabel.camera import DepthQuality
 
 
 @dataclass
@@ -30,20 +26,20 @@ class Datapoint:
     dist_coeffs: np.ndarray
 
 
-class PoseRegistrator(Observer):
+class PoseRegistration(rl.Observer):
     # handles the initial object pose registration
-    def __init__(self, scene: Scene) -> None:
+    def __init__(self, scene: rl.Scene) -> None:
         super().__init__()
         # TODO set lighting to standard lighting
         self._scene = scene
         self.listen_to(self._scene)
         self.is_active = False
         self.mesh_cache = {}
-        self.datapoints: List[Datapoint] = []
+        self.datapoints: list[Datapoint] = []
         self.trajectory_generator = TrajectoryGenerator()
         self.acquisition = Acquisition()
 
-    def update_observer(self, subject: Observable, event: Event, *args, **kwargs):
+    def update_observer(self, subject: rl.Observable, event: Event, *args, **kwargs):
         if event == Event.MODE_CHANGED:
             if kwargs["mode"] == "registration":
                 self.reset()
@@ -54,7 +50,7 @@ class PoseRegistrator(Observer):
     def reset(self) -> None:
         self.datapoints.clear()
 
-    def capture(self) -> Datapoint | None:
+    async def capture(self) -> Datapoint | None:
         if self._scene.selected_camera is None:
             logging.error("No camera selected")
             return None
@@ -62,7 +58,8 @@ class PoseRegistrator(Observer):
         self._scene.background.set_textured()  # easier to detect -> less noise
 
         # best settings
-        frame = self._scene.selected_camera.get_frame(depth_quality=DepthQuality.GT)
+        cam_pose = await self._scene.selected_camera.pose
+        frame = self._scene.selected_camera.get_frame(depth_quality=rl.camera.DepthQuality.GT)
         if frame.rgb is None or not self._scene.selected_camera.is_calibrated():
             return None
 
@@ -73,15 +70,15 @@ class PoseRegistrator(Observer):
         datapoint = Datapoint(
             rgb=frame.rgb,
             depth=frame.depth,
-            pose=self._scene.selected_camera.pose,
+            pose=cam_pose,
             intrinsics=self._scene.selected_camera.intrinsic_matrix,
-            dist_coeffs=self._scene.selected_camera.dist_coeffs,
+            dist_coeffs=self._scene.selected_camera.dist_coefficients,
         )
 
         self.datapoints.append(datapoint)
         return datapoint
 
-    async def capture_images(self, callback) -> None:
+    async def capture_images(self) -> None:
         if self._scene.selected_camera is None:
             logging.error("No camera selected")
             return None
@@ -93,13 +90,13 @@ class PoseRegistrator(Observer):
         if obj is None:
             logging.error("No object selected")
             return
-        center = obj.pose[:3, 3]
+        center = (await obj.pose)[:3, 3]
 
         trajectory = self.trajectory_generator.generate_trajectory_above_center(
             center, trajectory_settings
         )
 
-        self.trajectory_generator.visualize_trajectory(self._scene.selected_camera, [])
+        await self.trajectory_generator.visualize_trajectory(self._scene.selected_camera, [])
 
         logging.debug("Starting acquisition for calibration...")
 
@@ -107,14 +104,10 @@ class PoseRegistrator(Observer):
         async for _ in self.acquisition.execute([self._scene.selected_camera], trajectory):
             i += 1
             logging.debug(f"Reached {i}/{len(trajectory)}")
-            if callback is not None:
-                callback()
-            self.capture()
+            await self.capture()
 
-        if callback is not None:
-            callback()
-
-    def optimize_pose(self) -> None:
+    @rl.as_async_task
+    async def optimize_pose(self) -> None:
         obj = self._scene.selected_object
         if obj is None:
             logging.error("No object selected")
@@ -123,8 +116,9 @@ class PoseRegistrator(Observer):
         obj_points = obj.mesh.sample_points_poisson_disk(1000)
 
         valid_campose_icp = []
+        obj_pose = await obj.pose
         for datapoint in tqdm(self.datapoints, desc="ICP"):
-            initial_guess = np.linalg.inv(datapoint.pose) @ obj.pose
+            initial_guess = np.linalg.inv(datapoint.pose) @ obj_pose
             intrinsics = o3d.camera.PinholeCameraIntrinsic(
                 width=datapoint.depth.shape[1],
                 height=datapoint.depth.shape[0],
@@ -165,7 +159,7 @@ class PoseRegistrator(Observer):
         )
 
         ret = self._optimize_object_pose(
-            obj.pose,
+            obj_pose,
             [x[0] for x in valid_campose_icp],
             [x[1] for x in valid_campose_icp],
         )
@@ -179,10 +173,10 @@ class PoseRegistrator(Observer):
 
         obj.register_pose(world2object)
 
-    def move_pose(self, obj: LabelledObject, x, y, z, rho, phi, theta):
+    def move_pose(self, obj: rl.LabelledObject, x, y, z, rho, phi, theta):
         obj.pose = get_affine_matrix_from_euler([rho, phi, theta], [x, y, z])
 
-    def get_from_image_cache(self, index):
+    async def get_from_image_cache(self, index):
         try:
             datapoint: Datapoint = self.datapoints[index]
         except IndexError:
@@ -190,7 +184,7 @@ class PoseRegistrator(Observer):
 
         img = datapoint.rgb.copy()
         if self._scene.selected_object is not None:
-            img = self.draw_registered_object(
+            img = await self.draw_registered_object(
                 self._scene.selected_object,
                 img,
                 datapoint.pose,
@@ -200,20 +194,25 @@ class PoseRegistrator(Observer):
 
         return img
 
-    def draw_on_preview(self, cam: Camera, rgb: np.ndarray):
+    async def draw_on_preview(self, cam: rl.camera.Camera, rgb: np.ndarray):
         if not self.is_active or not cam.is_calibrated():
             return rgb
 
         for obj in self._scene.objects.values():
-            if not obj.registered:
-                continue
-            self.draw_registered_object(obj, rgb, cam.pose, cam.intrinsic_matrix, cam.dist_coeffs)
+            await self.draw_registered_object(
+                obj, rgb, await cam.pose, cam.intrinsic_matrix, cam.dist_coefficients
+            )
         return rgb
 
-    def draw_registered_object(
-        self, obj: LabelledObject, rgb, cam_pose, cam_intrinsics, cam_dist_coeffs
+    async def draw_registered_object(
+        self,
+        obj: rl.LabelledObject,
+        rgb: np.ndarray,
+        cam_pose: np.ndarray,
+        cam_intrinsics: np.ndarray,
+        cam_dist_coeffs: np.ndarray,
     ):
-        cam2obj = invert_homogeneous(cam_pose) @ obj.pose
+        cam2obj = invert_homogeneous(cam_pose) @ (await obj.pose)
         rvec, _ = cv2.Rodrigues(cam2obj[:3, :3])  # type: ignore
         tvec = cam2obj[:3, 3]
 

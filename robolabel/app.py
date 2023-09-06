@@ -8,12 +8,9 @@ import logging
 from pathlib import Path
 import asyncio
 
-from robolabel.scene import Scene
-from robolabel.robot import MockRobot, FanucCRX10iAL
-from robolabel.camera import DemoCam, Realsense, ZedCamera
-from robolabel.labelled_object import LabelledObject
-from robolabel.operators import CameraCalibrator, PoseRegistrator
-from robolabel.gui import Overview, ViewAcquisition, ViewPoseRegistration, ViewCalibration
+import robolabel as rl
+
+from typing import Any
 
 
 class App:
@@ -28,32 +25,26 @@ class App:
         self.stop = False
         self.root.title("Robotic Labelling")
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
-        self.scene = Scene()
+        self.scene = rl.Scene()
         # --- load controllers ---
-        self.calibrator = CameraCalibrator(self.scene)
-        self.pose_registrator = PoseRegistrator(self.scene)
+        self.calibrator = rl.operators.CameraCalibrator(self.scene)
+        self.pose_registration = rl.operators.PoseRegistration(self.scene)
 
         ## --- Assemble scene ---
         # for testing
-        mock_robot = MockRobot()
+        mock_robot = rl.robot.MockRobot()
         self.scene.add_robot(mock_robot)
-        self.scene.add_camera(DemoCam("Demo Cam"))
+        self.scene.add_camera(rl.camera.DemoCam("Demo Cam"))
 
-        crx = FanucCRX10iAL()
+        crx = rl.robot.FanucCRX10iAL()
         self.scene.add_robot(crx)
 
         # find connected realsense devices
-        for cam in Realsense.get_available_devices():
+        for cam in rl.camera.Realsense.get_available_devices():
             self.scene.add_camera(cam)
 
-        for cam in ZedCamera.get_available_devices():
+        for cam in rl.camera.ZedCamera.get_available_devices():
             self.scene.add_camera(cam)
-
-        state_path = Path("app_state.config")
-        if state_path.exists():
-            with state_path.open("r") as f:
-                data = json.load(f)
-            self.load_state(data)
 
         ## ---  build GUI ---
         self.menubar = tk.Menu(self.root)
@@ -81,18 +72,20 @@ class App:
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
         self.root.rowconfigure(1, weight=1)
-        self.overview = Overview(self.root, self.scene, self.calibrator, self.pose_registrator)
+        self.overview = rl.gui.Overview(
+            self.root, self.scene, self.calibrator, self.pose_registration
+        )
         self.tabs = ttk.Notebook(self.root)
         self.overview.grid(sticky=tk.NSEW, pady=10)
         self.tabs.grid(sticky=tk.NSEW, pady=10)
 
-        self.cal = ViewCalibration(self.tabs, self.scene, self.calibrator)
+        self.cal = rl.gui.ViewCalibration(self.tabs, self.scene, self.calibrator)
         self.tabs.add(self.cal, text="1. Camera Calibration")
 
-        reg = ViewPoseRegistration(self.tabs, self.scene, self.pose_registrator)
+        reg = rl.gui.ViewPoseRegistration(self.tabs, self.scene, self.pose_registration)
         self.tabs.add(reg, text="2. Pose Registration")
 
-        self.acquisition = ViewAcquisition(self.tabs, self.scene)
+        self.acquisition = rl.gui.ViewAcquisition(self.tabs, self.scene)
         self.tabs.add(self.acquisition, text="3. Acquisition")
 
         # register callback on tab change
@@ -109,19 +102,22 @@ class App:
         elif "viewacquisition" in open_tab:
             self.scene.change_mode("acquisition")
 
-    def _on_close(self):
+    @rl.as_async_task
+    async def _on_close(self):
         logging.warning("Closing app...")
         state_path = Path("app_state.config")
-        with state_path.open("w") as f:
-            self.save_state(f)
+        await self.save_state(state_path)
         self.stop = True
 
     def run(self):
         loop = asyncio.get_event_loop()
+        state_path = Path("app_state.config")
+        loop.run_until_complete(self.load_state(state_path))
+
         try:
             loop.run_until_complete(self._tk_updater())
         except KeyboardInterrupt:
-            self._on_close()
+            loop.run_until_complete(self._on_close())
         finally:
             loop.close()
 
@@ -136,17 +132,23 @@ class App:
         await asyncio.sleep(1.0)
         logging.info("Tk loop finished.")
 
-    def load_state(self, data: dict) -> None:
-        self.calibrator.load(data["camera_calibration"])
+    async def load_state(self, file: Path) -> None:
+        try:
+            with Path(file).open("r") as f:
+                data = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            logging.warning(f"Could not load state from {file}")
+            return
+
+        await self.calibrator.load(data["camera_calibration"])
         for obj_data in data["objects"]:
-            obj = LabelledObject(
+            obj = rl.LabelledObject(
                 obj_data["name"],
                 Path(obj_data["mesh_path"]),
                 obj_data["semantic_color"],
             )
 
-            if obj_data["registered"]:
-                obj.register_pose(np.array(obj_data["pose"]))
+            obj.register_pose(np.array(obj_data["pose"]))
 
             self.scene.add_object(obj)
 
@@ -155,15 +157,14 @@ class App:
                 continue
             self.scene.robots[name].home_pose = np.array(pose)
 
-    def save_state(self, file: IOBase) -> None:
+    async def save_state(self, filepath: Path) -> None:
         data = {
-            "camera_calibration": self.calibrator.dump(),
+            "camera_calibration": await self.calibrator.dump(),
             "objects": [
                 {
                     "name": name,
                     "mesh_path": str(obj.mesh_path),
-                    "pose": obj.pose.tolist(),
-                    "registered": obj.registered,
+                    "pose": (await obj.pose).tolist(),
                     "semantic_color": obj.semantic_color,
                 }
                 for name, obj in self.scene.objects.items()
@@ -173,33 +174,38 @@ class App:
                 for name, robot in self.scene.robots.items()
             },
         }
-
         # with Path(file.name).open("w") as f:
-        json.dump(data, file, indent=2)
+        with filepath.open("w") as F:
+            json.dump(data, F, indent=2)
 
-    def _on_load_config(self):
+    @rl.as_async_task
+    async def _on_load_config(self):
         file = filedialog.askopenfilename(
             title="Select Configuration file",
             filetypes=(("configuration files", "*.config"), ("all files", "*.*")),
         )
+        await self.load_state(Path(file))
 
-        with Path(file).open("r") as f:
-            data = json.load(f)
-        self.load_state(data)
-
-    def _on_save_config(self) -> None:
+    @rl.as_async_task
+    async def _on_save_config(self) -> None:
         default_name = "scene"
 
-        file = filedialog.asksaveasfilename(
+        file_name = filedialog.asksaveasfilename(
             title="Save Configuration file",
             filetypes=(("configuration files", "*.config"), ("all files", "*.*")),
             defaultextension=".config",
             initialfile=default_name,
         )
-        with Path(file).open("w") as f:
-            self.save_state(f)
+        try:
+            filepath = Path(file_name).resolve()
+        except Exception as e:
+            logging.error("Could not save file: %s", e)
+            return
 
-    def _on_add_object(self) -> None:
+        await self.save_state(filepath)
+
+    @rl.as_async_task
+    async def _on_add_object(self) -> None:
         file = filedialog.askopenfilename(
             title="Select Object Ply file",
             filetypes=(("ply files", "*.ply"), ("all files", "*.*")),
@@ -216,7 +222,7 @@ class App:
             while f"{obj_name}_{i}" in self.scene.objects:
                 i += 1
             obj_name = f"{obj_name}.{i:03}"
-        new_object = LabelledObject(obj_name, path)
-        monitor_pose = self.scene.background.pose
-        new_object.pose = monitor_pose  # add this as inital position
+        new_object = rl.LabelledObject(obj_name, path)
+        monitor_pose = await self.scene.background.pose
+        new_object.pose = monitor_pose  # add this as initial position
         self.scene.add_object(new_object)

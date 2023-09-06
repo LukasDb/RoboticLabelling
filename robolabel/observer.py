@@ -1,5 +1,5 @@
 from enum import Enum, auto
-from typing import List, Set
+from typing import Any, Set
 import logging
 
 
@@ -21,10 +21,10 @@ class Observable:
     def __init__(self):
         self.__observers: Set["Observer"] = set()
 
-    def register(self, observer):
+    def register(self, observer: "Observer"):
         self.__observers.add(observer)
 
-    def unregister(self, observer):
+    def unregister(self, observer: "Observer"):
         self.__observers.remove(observer)
 
     def notify(self, event: Event, *args, **kwargs):

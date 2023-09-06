@@ -65,7 +65,7 @@ class DatasetWriter:
             self.hq_depths.clear()
             self.hq_depths_R.clear()
 
-    def capture(self, cam: Camera, idx_trajecory: int) -> None:
+    async def capture(self, cam: Camera, idx_trajectory: int) -> None:
         """capture datapoint at trajectory point: idx_trajectory"""
         cam_dir = self._output_dir / cam.name
 
@@ -74,8 +74,8 @@ class DatasetWriter:
                 k: cam_dir / k for k in ["gt", "mask", "rgb", "depth", "depth_HQ"]
             }
 
-            for dir in self.subdirs[cam].values():
-                dir.mkdir(parents=True, exist_ok=True)
+        for dir in self.subdirs[cam].values():
+            dir.mkdir(parents=True, exist_ok=True)
 
         if self._step is None:
             # set the start step initially (to append)
@@ -91,33 +91,33 @@ class DatasetWriter:
         with DelayedKeyboardInterrupt():
             try:
                 if not self._is_pre_acquisition:
-                    self._generate_data(cam, idx_trajecory)
+                    await self._generate_data(cam, idx_trajectory)
                 else:
-                    self._acquire_pre_acquisition(cam, idx_trajecory)
+                    self._acquire_pre_acquisition(cam, idx_trajectory)
             except Exception as e:
                 self._cleanup(cam, self._step)
                 raise e
             finally:
                 self._step += 1
 
-    def _acquire_pre_acquisition(self, cam: Camera, idx_trajecory: int):
+    def _acquire_pre_acquisition(self, cam: Camera, idx_trajectory: int):
         """acquires high-quality depth to be used for automatic segmentation labelling"""
-        logging.debug(f"Acquiring pre-acquisition data for #{idx_trajecory}")
+        logging.debug(f"Acquiring pre-acquisition data for #{idx_trajectory}")
         frame = cam.get_frame(depth_quality=DepthQuality.GT)
         assert frame.depth is not None, "Depth frame is None"
 
         hq_depth = frame.depth
         hq_depth_R = frame.depth_R
 
-        self.hq_depths.setdefault(cam, {})[idx_trajecory] = hq_depth
-        self.hq_depths_R.setdefault(cam, {})[idx_trajecory] = hq_depth_R
+        self.hq_depths.setdefault(cam, {})[idx_trajectory] = hq_depth
+        self.hq_depths_R.setdefault(cam, {})[idx_trajectory] = hq_depth_R
 
-    def _generate_data(self, cam: Camera, idx_trajectory: int):
+    async def _generate_data(self, cam: Camera, idx_trajectory: int):
         """writes a datapoint with all GT labels"""
         logging.debug(f"Generating data #{self._step}")
         frame = cam.get_frame(depth_quality=DepthQuality.INFERENCE)
-        cam_pos = cam.get_position()
-        cam_rot = cam.get_orientation()
+        cam_pos = await cam.get_position()
+        cam_rot = await cam.get_orientation()
         try:
             hq_depth = self.hq_depths[cam][idx_trajectory]
             hq_depth_R = self.hq_depths_R[cam][idx_trajectory]
@@ -153,41 +153,43 @@ class DatasetWriter:
 
         # write masks
         masks: dict[str, np.ndarray] = {}
-        visib_mask = np.zeros((cam.height, cam.width), dtype=np.uint8)
+        visible_mask = np.zeros((cam.height, cam.width), dtype=np.uint8)
         for object_id, obj in enumerate(self._active_objects, start=1):
-            unoccluded_mask = self._render_object_mask(obj, cam)
+            unoccluded_mask = await self._render_object_mask(obj, cam)
             masks[f"{object_id:04}.R"] = unoccluded_mask.astype(np.float16)
 
-            occluded_mask = self._calculate_occluded_mask(unoccluded_mask, obj, cam, hq_depth)
-            visib_mask[occluded_mask == 1] = object_id
+            occluded_mask = await self._calculate_occluded_mask(
+                unoccluded_mask, obj, cam, hq_depth
+            )
+            visible_mask[occluded_mask == 1] = object_id
 
-        masks["visib.R"] = visib_mask.astype(np.float16)
+        masks["visib.R"] = visible_mask.astype(np.float16)
         EXR(self.subdirs[cam]["mask"] / f"mask_{self._step:04}.exr").write(masks)
 
         # write GT metadata
         obj_list = []
         for object_id, obj in enumerate(self._active_objects, start=1):
-            px_count_visib = np.count_nonzero(visib_mask == object_id)
-            bbox_visib = self._get_bbox(visib_mask, object_id)
+            px_count_visib = np.count_nonzero(visible_mask == object_id)
+            bbox_visib = self._get_bbox(visible_mask, object_id)
 
             obj_mask = masks[f"{object_id:04}.R"]
             bbox_obj = self._get_bbox(obj_mask, 1)
             px_count_all = np.count_nonzero(obj_mask == 1)
-            px_count_valid = np.count_nonzero(frame.depth[visib_mask == object_id])
-            visib_fract = 0.0 if px_count_all == 0 else px_count_visib / px_count_all
+            px_count_valid = np.count_nonzero(frame.depth[visible_mask == object_id])
+            visible_fraction = 0.0 if px_count_all == 0 else px_count_visib / px_count_all
 
             obj_list.append(
                 {
                     "class": obj.name.split(".")[0],
                     "object id": object_id,
-                    "pos": list(obj.get_position()),
-                    "rotation": list(obj.get_orientation().as_quat(canonical=True)),
+                    "pos": list(await obj.get_position()),
+                    "rotation": list((await obj.get_orientation()).as_quat(canonical=True)),
                     "bbox_visib": bbox_visib,
                     "bbox_obj": bbox_obj,
                     "px_count_visib": px_count_visib,
                     "px_count_valid": px_count_valid,
                     "px_count_all": px_count_all,
-                    "visib_fract": visib_fract,
+                    "visib_fract": visible_fraction,
                 }
             )
 
@@ -219,9 +221,9 @@ class DatasetWriter:
                 logging.debug(f"Removing {file}")
                 file.unlink()
 
-    def _render_object_mask(self, obj: LabelledObject, cam: Camera) -> np.ndarray:
+    async def _render_object_mask(self, obj: LabelledObject, cam: Camera) -> np.ndarray:
         """render object mask from camera"""
-        scene, rays = self._get_raycasting_scene(obj, cam)
+        scene, rays = await self._get_raycasting_scene(obj, cam)
         mask = scene.test_occlusions(rays).numpy()
         mask = np.where(mask == True, 1, 0).astype(np.uint8)
 
@@ -231,7 +233,7 @@ class DatasetWriter:
         # return mask
         return mask
 
-    def _calculate_occluded_mask(
+    async def _calculate_occluded_mask(
         self,
         unoccluded_mask: np.ndarray,
         obj: LabelledObject,
@@ -240,7 +242,7 @@ class DatasetWriter:
     ) -> np.ndarray:
         """by knowing what the depth image *should* look like, we can calculate the occluded mask"""
 
-        scene, rays = self._get_raycasting_scene(obj, cam)
+        scene, rays = await self._get_raycasting_scene(obj, cam)
         ans = scene.cast_rays(rays)
         rendered_depth = ans["t_hit"].numpy()
 
@@ -267,11 +269,11 @@ class DatasetWriter:
 
         return occluded_mask
 
-    def _get_raycasting_scene(self, obj: LabelledObject, cam: Camera, visualize_debug=False):
+    async def _get_raycasting_scene(self, obj: LabelledObject, cam: Camera, visualize_debug=False):
         scene = o3d.t.geometry.RaycastingScene()
 
         mesh_t = o3d.t.geometry.TriangleMesh.from_legacy(obj.mesh)
-        mesh_t.transform(obj.pose)
+        mesh_t.transform(await obj.pose)
         mesh_id = scene.add_triangles(mesh_t)
 
         if visualize_debug:
@@ -279,19 +281,19 @@ class DatasetWriter:
                 cam.width,
                 cam.height,
                 cam.intrinsic_matrix,
-                invert_homogeneous(cam.pose),
+                invert_homogeneous(await cam.pose),
                 1.0,
             )
 
             mesh = o3d.geometry.TriangleMesh(obj.mesh)
             mesh.compute_vertex_normals()
             mesh.paint_uniform_color(np.array(obj.semantic_color) / 255.0)
-            mesh.transform(obj.pose)
+            mesh.transform(await obj.pose)
             o3d.visualization.draw_geometries([mesh, frustum])  # type: ignore
 
         rays = o3d.t.geometry.RaycastingScene.create_rays_pinhole(
             o3d.core.Tensor(cam.intrinsic_matrix),
-            o3d.core.Tensor(invert_homogeneous(cam.pose)),
+            o3d.core.Tensor(invert_homogeneous(await cam.pose)),
             cam.width,
             cam.height,
         )

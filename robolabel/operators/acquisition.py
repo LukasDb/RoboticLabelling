@@ -7,8 +7,8 @@ import tkinter as tk
 from robolabel.camera import Camera
 from robolabel.robot import Robot
 from robolabel.labelled_object import LabelledObject
-from robolabel.background_monitor import BackgroundMonitor, BackgroundSettings
-from robolabel.lights_controller import LightsController, LightsSettings
+from robolabel.operators.background_monitor import BackgroundMonitor, BackgroundSettings
+from robolabel.operators.lights_controller import LightsController, LightsSettings
 from .dataset_writer import DatasetWriter, WriterSettings
 from robolabel.lib.geometry import invert_homogeneous
 import itertools as it
@@ -96,8 +96,6 @@ class Acquisition:
                     if lights_controller is not None:
                         lights_controller.set_step(light_step)
 
-                    # wait for background, lights and camera to settle
-                    await asyncio.sleep(0.1)
                     if self._cancelled:
                         self._cancelled = False
                         return

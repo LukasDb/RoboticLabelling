@@ -1,15 +1,18 @@
 import tkinter as tk
 from tkinter import ttk
 import dataclasses
+from typing import Any, ClassVar, Protocol
+
+
+_SupportedVarTypes = tk.BooleanVar | tk.StringVar | tk.IntVar
+_RowType = tk.Variable | list[_SupportedVarTypes] | tuple[_SupportedVarTypes]
 
 
 class SettingsWidget(ttk.Frame):
     """Settings widget for arbitrary dataclasses"""
 
-    dataclass: type
-
-    def __init__(self, master, dataclass, **kwargs) -> None:
-        defaults = {"borderwidth": 2, "relief": tk.GROOVE}
+    def __init__(self, master: tk.Misc, dataclass: type, **kwargs: dict[str, Any]) -> None:
+        defaults: dict[str, Any] = {"borderwidth": 2, "relief": tk.GROOVE}
         defaults.update(kwargs)
         super().__init__(master, **defaults)
 
@@ -18,11 +21,11 @@ class SettingsWidget(ttk.Frame):
             dataclass, "__dataclass_fields__"
         ), f"To create Settings for {dataclass}, it must be a dataclass"
 
-        self.fields: dict[str, dataclasses.Field] = dataclass.__dataclass_fields__
-        self.vars: dict[str, tk.Variable | tuple] = {}
+        self.fields: dict[str, dataclasses.Field[Any]] = dataclass.__dataclass_fields__  # type: ignore
+        self.vars: dict[str, _RowType] = {}
 
         self.fields = {k: v for k, v in self.fields.items() if not k.startswith("_")}
-        self._private_vars: dict = {}
+        self._private_vars: dict[str, _RowType] = {}
 
         pad = 10
         self.max_columns = 2
@@ -40,7 +43,9 @@ class SettingsWidget(ttk.Frame):
 
         self.set_from_instance(dataclass())  # set defaults
 
-    def create_entry_widget(self, master, row: int, column: int, dtype: type):
+    def create_entry_widget(self, master: tk.Misc, row: int, column: int, dtype: type):
+        """create a widget for a dataclass field"""
+
         if dtype is int:
             var = tk.StringVar()
             widget = ttk.Spinbox(master, from_=-1000, to=1000, textvariable=var)
@@ -58,10 +63,7 @@ class SettingsWidget(ttk.Frame):
 
         elif dtype.__origin__ is tuple:  # type: ignore
             widget = ttk.Frame(master)
-            var = []
-            for offset, t in enumerate(dtype.__args__):  # type: ignore
-                var.append(self.create_entry_widget(widget, row, column + offset, t))
-            var = tuple(var)
+            var = tuple(self.create_entry_widget(widget, row, column + offset, t) for offset, t in enumerate(dtype.__args__))  # type: ignore
 
         else:
             raise ValueError(f"Unsupported type {dtype}")
@@ -78,10 +80,11 @@ class SettingsWidget(ttk.Frame):
             else:
                 self._set_var(k, v)
 
-    def _set_var(self, name, value):
+    def _set_var(self, name: str, value: Any):
         var = self.vars[name]
 
         if isinstance(var, tuple) or isinstance(var, list):
+            assert len(var) == len(value), f"Length mismatch for {name}"
             for _var, v in zip(var, value):
                 _var.set(v)
         else:
@@ -93,8 +96,9 @@ class SettingsWidget(ttk.Frame):
             **{k.name: self._get_widget(k) for k in self.fields.values()}, **self._private_vars
         )
 
-    def _get_widget(self, field: dataclasses.Field):
+    def _get_widget(self, field: dataclasses.Field[Any]):
         var = self.vars[field.name]
         if isinstance(var, tuple) or isinstance(var, list):
             return tuple(dtype(v.get()) for v, dtype in zip(var, field.type.__args__))
+
         return field.type(var.get())

@@ -22,7 +22,7 @@ class TrajectoryGenerator:
     def __init__(self):
         self._current_trajectory = None
 
-    def generate_trajectory(
+    async def generate_trajectory(
         self, active_objects: list[LabelledObject], settings: TrajectorySettings
     ) -> list[np.ndarray] | None:
         """generates a trajectory based on the selected objects.
@@ -36,7 +36,7 @@ class TrajectoryGenerator:
         if self._current_trajectory is not None:
             logging.warning("Overwriting current trajectory")
 
-        object_positions = np.array([o.get_position() for o in active_objects])
+        object_positions = np.array([await o.get_position() for o in active_objects])
         center = np.mean(object_positions, axis=0)
         return self.generate_trajectory_above_center(center, settings)
 
@@ -135,7 +135,7 @@ class TrajectoryGenerator:
         self._current_trajectory = trajectory
         return trajectory
 
-    def visualize_trajectory(self, camera: Camera, objects: list[LabelledObject]) -> None:
+    async def visualize_trajectory(self, camera: Camera, objects: list[LabelledObject]) -> None:
         assert self._current_trajectory is not None, "Generate trajectory first"
 
         w, h = camera.width, camera.height
@@ -173,7 +173,7 @@ class TrajectoryGenerator:
             mesh = o3d.geometry.TriangleMesh(obj.mesh)
             mesh.compute_vertex_normals()
             mesh.paint_uniform_color(np.array(obj.semantic_color) / 255.0)
-            mesh.transform(obj.pose)
+            mesh.transform(await obj.pose)
             object_meshes.append(mesh)
 
         o3d.visualization.draw_geometries([*vis_views, lines, origin, *object_meshes])  # type: ignore

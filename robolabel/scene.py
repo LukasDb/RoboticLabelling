@@ -1,39 +1,35 @@
 from typing import Literal
 
-from .observer import Observable, Event
-from .labelled_object import LabelledObject
-from .robot.robot import Robot
-from .camera.camera import Camera
-from .background_monitor import BackgroundMonitor
-from .lights_controller import LightsController
+import robolabel as rl
+from robolabel import Event
 
 
-class Scene(Observable):
+class Scene(rl.Observable):
     def __init__(self) -> None:
-        Observable.__init__(self)
-        self.objects: dict[str, LabelledObject] = {}
-        self.robots: dict[str, Robot] = {}
-        self.cameras: dict[str, Camera] = {}
-        self.background = BackgroundMonitor()
-        self.lights = LightsController()
-        self.selected_camera: Camera | None = None
-        self.selected_object: LabelledObject | None = None
+        rl.Observable.__init__(self)
+        self.objects: dict[str, rl.LabelledObject] = {}
+        self.robots: dict[str, rl.robot.Robot] = {}
+        self.cameras: dict[str, rl.camera.Camera] = {}
+        self.background = rl.operators.BackgroundMonitor()
+        self.lights = rl.operators.LightsController()
+        self.selected_camera: rl.camera.Camera | None = None
+        self.selected_object: rl.LabelledObject | None = None
 
         self.mode: Literal["acquisition", "calibration", "registration"] = "calibration"
 
-    def add_camera(self, camera: Camera):
+    def add_camera(self, camera: rl.camera.Camera):
         self.cameras.update({camera.unique_id: camera})
         self.notify(Event.CAMERA_ADDED, camera=camera)
 
-    def add_robot(self, robot: Robot):
+    def add_robot(self, robot: rl.robot.Robot):
         self.robots.update({robot.name: robot})
         self.notify(Event.ROBOT_ADDED, robot=robot)
 
-    def add_object(self, obj: LabelledObject):
+    def add_object(self, obj: rl.LabelledObject):
         self.objects.update({obj.name: obj})
         self.notify(Event.OBJECT_ADDED, object=obj)
 
-    def remove_object(self, obj: LabelledObject):
+    def remove_object(self, obj: rl.LabelledObject):
         self.objects.pop(obj.name)
         self.notify(Event.OBJECT_REMOVED, object=obj)
 

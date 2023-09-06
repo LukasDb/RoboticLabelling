@@ -1,7 +1,8 @@
 import numpy as np
+import numpy.typing as npt
 import tkinter as tk
-from .entity import Entity
-from PIL import Image, ImageTk
+from ..entity import Entity
+from PIL import Image
 import screeninfo
 import pathlib
 import cv2
@@ -18,6 +19,9 @@ class BackgroundSettings:
     use_backgrounds: bool = True
     n_steps: int = 5
     backgrounds_path: str = "./backgrounds"
+
+
+step_type = dict[str, pathlib.Path] | None
 
 
 class BackgroundMonitor(Entity):
@@ -40,7 +44,7 @@ class BackgroundMonitor(Entity):
         self.window.geometry("+0+0")
         self.setup_window(set_fullscreen=False)
 
-    def get_steps(self, settings: BackgroundSettings | None) -> list[dict | None]:
+    def get_steps(self, settings: BackgroundSettings | None) -> list[step_type]:
         if settings is None:
             settings = BackgroundSettings()
         if not settings.use_backgrounds:
@@ -53,7 +57,7 @@ class BackgroundMonitor(Entity):
 
         return [{"background": p} for p in bg_paths]
 
-    def set_step(self, step: dict | None) -> None:
+    def set_step(self, step: step_type) -> None:
         if step is None:
             return
         if "background" in step:
@@ -124,13 +128,16 @@ class BackgroundMonitor(Entity):
             f"Setting window up for screen with ({self.screen_width_m}, {self.screen_height_m}) meters"
         )
 
-    def set_image(self, image: np.ndarray) -> None:
+    def set_image(self, image: npt.NDArray[np.float64]) -> None:
         """Set the image of the background monitor"""
         # self.image_tk = ImageTk.PhotoImage(image=Image.fromarray(image))
         # self.canvas.itemconfig(self.image_container, image=self.image_tk)
         self.canvas.set_image(image)
+        self.canvas.update()
 
-    def draw_on_rgb(self, rgb, intrinsic, dist_coeffs, cam2monitor, color=(0, 255, 0)):
+    def visualize_monitor_in_camera_view(
+        self, rgb, intrinsic, dist_coeffs, cam2monitor, color=(0, 255, 0)
+    ):
         """Draw the background monitor on the rgb image"""
         half_w = self.screen_width_m / 2.0
         half_h = self.screen_height_m / 2.0

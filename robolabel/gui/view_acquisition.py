@@ -2,24 +2,17 @@ import tkinter as tk
 from tkinter import ttk
 import logging
 import asyncio
-
-from robolabel.scene import Scene
-from ..lib.widget_list import WidgetList
-from ..lib.settings_widget import SettingsWidget
-from robolabel.labelled_object import LabelledObject
-from robolabel.camera import Camera
-from robolabel.observer import Observable, Observer, Event
-from robolabel.operators import (
-    TrajectoryGenerator,
-    TrajectorySettings,
-    DatasetWriter,
-    WriterSettings,
-    Acquisition,
-)
-from robolabel.background_monitor import BackgroundSettings
-from robolabel.lights_controller import LightsSettings
 from contextlib import contextmanager
 import copy
+
+import robolabel as rl
+from robolabel import Event, SettingsWidget
+from robolabel.operators import (
+    TrajectorySettings,
+    BackgroundSettings,
+    LightsSettings,
+    WriterSettings,
+)
 
 
 def ensure_free_robot(func):
@@ -33,21 +26,21 @@ def ensure_free_robot(func):
     return wrapper
 
 
-class ViewAcquisition(tk.Frame, Observer):
-    def __init__(self, master, scene: Scene) -> None:
+class ViewAcquisition(tk.Frame, rl.Observer):
+    def __init__(self, master, scene: rl.Scene) -> None:
         tk.Frame.__init__(self, master)
         self.scene = scene
         self.listen_to(self.scene)
 
-        self.writer = DatasetWriter()
-        self.trajectory_generator = TrajectoryGenerator()
-        self.acquisition = Acquisition()
+        self.writer = rl.operators.DatasetWriter()
+        self.trajectory_generator = rl.operators.TrajectoryGenerator()
+        self.acquisition = rl.operators.Acquisition()
 
         self.title = ttk.Label(self, text="3. Acquisition")
         self.title.grid(columnspan=3)
 
-        self.cam_list = WidgetList(self, column_names=["Cameras"], columns=[tk.Checkbutton])
-        self.object_list = WidgetList(self, column_names=["Objects"], columns=[tk.Checkbutton])
+        self.cam_list = rl.WidgetList(self, column_names=["Cameras"], columns=[tk.Checkbutton])
+        self.object_list = rl.WidgetList(self, column_names=["Objects"], columns=[tk.Checkbutton])
         self.controls = ttk.Frame(self)
         self.settings = ttk.Frame(self)
 
@@ -80,10 +73,7 @@ class ViewAcquisition(tk.Frame, Observer):
         self.view_trajectory_button = ttk.Button(
             self.controls,
             text="View Trajectory",
-            command=lambda: self.trajectory_generator.visualize_trajectory(
-                self._active_cameras()[0],
-                self._active_objects(),
-            ),
+            command=self._on_visualize_trajectory,
         )
 
         self.dry_run_button = ttk.Button(
@@ -133,10 +123,17 @@ class ViewAcquisition(tk.Frame, Observer):
         self._update_cam_table()
         self._update_object_table()
 
-    def _generate_trajectory(self) -> None:
-        self.trajectory_generator.generate_trajectory(
+    @rl.as_async_task
+    async def _generate_trajectory(self) -> None:
+        await self.trajectory_generator.generate_trajectory(
             self._active_objects(),
             self.w_trajectory_settings.get_instance(),
+        )
+
+    @rl.as_async_task
+    async def _on_visualize_trajectory(self):
+        await self.trajectory_generator.visualize_trajectory(
+            self._active_cameras()[0], self._active_objects()
         )
 
     @ensure_free_robot
@@ -169,7 +166,7 @@ class ViewAcquisition(tk.Frame, Observer):
     ) -> None:
         """synchronous wrapper"""
         logging.info("Starting acquisition...")
-        writer_settings: WriterSettings = self.w_writer_settings.get_instance()
+        writer_settings: rl.operators.WriterSettings = self.w_writer_settings.get_instance()
         active_objects = self._active_objects()
         active_cameras = self._active_cameras()
         bg_settings = self.w_background_settings.get_instance()
@@ -184,11 +181,11 @@ class ViewAcquisition(tk.Frame, Observer):
 
     async def _run_acquisition(
         self,
-        active_objects: list[LabelledObject],
-        active_cameras: list[Camera],
-        writer_settings: WriterSettings,
-        bg_settings: BackgroundSettings,
-        lights_settings: LightsSettings,
+        active_objects: list[rl.LabelledObject],
+        active_cameras: list[rl.camera.Camera],
+        writer_settings: rl.operators.WriterSettings,
+        bg_settings: rl.operators.BackgroundSettings,
+        lights_settings: rl.operators.LightsSettings,
     ):
         trajectory = self.trajectory_generator.get_current_trajectory()
 
@@ -210,7 +207,7 @@ class ViewAcquisition(tk.Frame, Observer):
             logging.info(f"Reached {idx_trajectory+1}/{len(trajectory)} point in trajectory")
             if writer_settings.use_writer:
                 try:
-                    writer.capture(cam, idx_trajectory)
+                    await writer.capture(cam, idx_trajectory)
                 except Exception as e:
                     logging.error(f"Error while capturing data for camera {cam.name}")
                     logging.error(e)
@@ -219,7 +216,7 @@ class ViewAcquisition(tk.Frame, Observer):
                     logging.error(traceback.format_exc())
                     return
 
-    def update_observer(self, subject: Observable, event: Event, *args, **kwargs) -> None:
+    def update_observer(self, subject: rl.Observable, event: Event, *args, **kwargs) -> None:
         if event == Event.CAMERA_ADDED:
             self._update_cam_table()
         elif event == Event.OBJECT_ADDED:
@@ -245,14 +242,14 @@ class ViewAcquisition(tk.Frame, Observer):
             self.object_list.add_new_row([{"text": obj.name, "variable": obj_state}])
             self.object_states[obj.name] = obj_state
 
-    def _active_cameras(self) -> list[Camera]:
+    def _active_cameras(self) -> list[rl.camera.Camera]:
         return [c for c in self.scene.cameras.values() if self.camera_states[c.unique_id].get()]
 
-    def _active_objects(self) -> list[LabelledObject]:
+    def _active_objects(self) -> list[rl.LabelledObject]:
         return [o for o in self.scene.objects.values() if self.object_states[o.name].get()]
 
     @contextmanager
-    def overwrite_settings(self, w_settings: SettingsWidget, overwrite: dict):
+    def overwrite_settings(self, w_settings: rl.SettingsWidget, overwrite: dict):
         settings = w_settings.get_instance()
         old_settings = copy.deepcopy(settings)
 

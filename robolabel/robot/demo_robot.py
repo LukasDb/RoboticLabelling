@@ -12,6 +12,14 @@ class MockRobot(Robot):
     def set_current_as_homepose(self) -> None:
         self.home_pose = self._pose
 
+    @property
+    async def pose(self) -> np.ndarray:
+        return self._pose
+
+    @pose.setter
+    def pose(self, pose: np.ndarray) -> None:
+        self._pose = pose
+
     async def move_to(self, pose: np.ndarray, timeout: float = 1.0) -> bool:
         await asyncio.sleep(0.5)
         self._pose = pose

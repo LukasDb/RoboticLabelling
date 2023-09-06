@@ -1,20 +1,20 @@
 import asyncio
 import tkinter as tk
 from tkinter import ttk
+
+import robolabel as rl
+from robolabel import Event
 from robolabel.lib.geometry import get_euler_from_affine_matrix
 
-from robolabel.scene import Scene
-from robolabel.observer import Event, Observable, Observer
-from ..lib.resizable_image import ResizableImage
-from robolabel.operators import PoseRegistrator
 
-
-class ViewPoseRegistration(Observer, ttk.Frame):
-    def __init__(self, master, scene: Scene, registrator: PoseRegistrator) -> None:
+class ViewPoseRegistration(rl.Observer, ttk.Frame):
+    def __init__(
+        self, master, scene: rl.Scene, registration: rl.operators.PoseRegistration
+    ) -> None:
         ttk.Frame.__init__(self, master)
         self.scene = scene
         self.listen_to(self.scene)
-        self.registrator = registrator
+        self.registration = registration
 
         self.title = ttk.Label(self, text="2. Pose Registration")
         self.title.grid(columnspan=2)
@@ -24,12 +24,12 @@ class ViewPoseRegistration(Observer, ttk.Frame):
         self.rowconfigure(1, weight=1)
 
         controls = self.setup_controls(self)
-        self.preview = ResizableImage(self, bg="#000000")
+        self.preview = rl.ResizableImage(self, bg="#000000")
 
         controls.grid(row=1, column=1, sticky=tk.NSEW)
         self.preview.grid(row=1, column=0, sticky=tk.NSEW)
 
-    def update_observer(self, subject: Observable, event: Event, *args, **kwargs):
+    def update_observer(self, subject: rl.Observable, event: Event, *args, **kwargs):
         if event == Event.OBJECT_ADDED:
             # configure choices for object selection
             self.listen_to(kwargs["object"])
@@ -43,7 +43,7 @@ class ViewPoseRegistration(Observer, ttk.Frame):
             Event.OBJECT_ADDED,
             Event.MODE_CHANGED,
         ]:
-            self._update_gui()
+            self._on_image_selection()
 
     def setup_controls(self, master) -> ttk.Frame:
         control_frame = ttk.Frame(master)
@@ -60,19 +60,19 @@ class ViewPoseRegistration(Observer, ttk.Frame):
         self.cancel_button = ttk.Button(
             control_frame,
             text="Cancel",
-            command=lambda: self.registrator.acquisition.cancel(),
+            command=lambda: self.registration.acquisition.cancel(),
         )
 
         self.image_selection = ttk.Combobox(control_frame)
         self.image_selection.bind(
-            sequence="<<ComboboxSelected>>", func=lambda _: self._update_gui()
+            sequence="<<ComboboxSelected>>", func=lambda _: self._on_image_selection()
         )
 
         # add button
         self.optimize_button = ttk.Button(
             control_frame,
             text="Optimize",
-            command=self.registrator.optimize_pose,
+            command=self.registration.optimize_pose,
         )
         self.reset_pose_button = ttk.Button(
             control_frame,
@@ -144,10 +144,11 @@ class ViewPoseRegistration(Observer, ttk.Frame):
 
         return control_frame
 
-    def _change_initial_guess(self):
+    @rl.as_async_task
+    async def _change_initial_guess(self):
         if self.scene.selected_object is not None:
             (rho, phi, theta), (x, y, z) = get_euler_from_affine_matrix(
-                self.scene.selected_object.pose
+                await self.scene.selected_object.pose
             )
 
             if self.manual_pose_x.get():
@@ -163,35 +164,42 @@ class ViewPoseRegistration(Observer, ttk.Frame):
             if self.manual_pose_z.get():
                 theta = self.manual_pose_theta.get()
 
-            self.registrator.move_pose(self.scene.selected_object, x, y, z, rho, phi, theta)
+            self.registration.move_pose(self.scene.selected_object, x, y, z, rho, phi, theta)
 
-            self._update_gui()  # paint new mesh
+            await self._update_gui()  # paint new mesh
 
-    def _on_capture(self):
-        self.registrator.capture()
-        self._update_gui(set_to_last_image=True)
+    @rl.as_async_task
+    async def _on_capture(self):
+        await self.registration.capture()
+        await self._update_gui(set_to_last_image=True)
 
-    def _on_automatic_acquisition(self):
-        asyncio.get_event_loop().create_task(
-            self.registrator.capture_images(lambda: self._update_gui(set_to_last_image=True))
-        )
+    @rl.as_async_task
+    async def _on_automatic_acquisition(self):
+        await self.registration.capture_images()
+        await self._update_gui(set_to_last_image=True)
 
-    def _on_reset_pose(self):
+    @rl.as_async_task
+    async def _on_reset_pose(self):
         monitor_pose = self.scene.background.pose
         if self.scene.selected_object is not None:
-            self.scene.selected_object.pose = monitor_pose  # add this as inital position
-        self._update_gui()
+            self.scene.selected_object.pose = await monitor_pose  # add this as initial position
+        await self._update_gui()
 
-    def _on_reset(self):
-        self.registrator.reset()
-        self._update_gui()
+    @rl.as_async_task
+    async def _on_image_selection(self):
+        await self._update_gui()
 
-    def _update_gui(self, set_to_last_image=False):
+    @rl.as_async_task
+    async def _on_reset(self):
+        self.registration.reset()
+        await self._update_gui()
+
+    async def _update_gui(self, set_to_last_image=False):
         if self.scene.selected_object is None:
             return
 
         (rho, phi, theta), (x, y, z) = get_euler_from_affine_matrix(
-            self.scene.selected_object.pose
+            await self.scene.selected_object.pose
         )
 
         self.manual_pose_x.set(float(x))  # set first spinbox values to current pose
@@ -202,12 +210,12 @@ class ViewPoseRegistration(Observer, ttk.Frame):
         self.manual_pose_theta.set(float(theta))
 
         # update preview
-        if len(self.registrator.datapoints) == 0:
+        if len(self.registration.datapoints) == 0:
             self.preview.clear_image()
             return
 
         self.image_selection["values"] = [
-            f"Image {i:2}" for i in range(len(self.registrator.datapoints))
+            f"Image {i:2}" for i in range(len(self.registration.datapoints))
         ]
         if set_to_last_image:
             self.image_selection.set(self.image_selection["values"][-1])
@@ -217,7 +225,8 @@ class ViewPoseRegistration(Observer, ttk.Frame):
             selected_index = int(selected.split(" ")[-1])
         except ValueError:
             return
-        img = self.registrator.get_from_image_cache(selected_index)
+        img = await self.registration.get_from_image_cache(selected_index)
+
         if img is not None:
             self.preview.set_image(img)
         else:
