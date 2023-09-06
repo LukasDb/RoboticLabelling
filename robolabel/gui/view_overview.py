@@ -277,10 +277,9 @@ class Overview(Observer, tk.Frame):
         while True:
             # framerate limiter
             t = time.perf_counter()
-            if (t - self.t_previous) < 1 / self.FPS:  # 30 FPS
+            if (t - self.t_previous) < 1 / self.FPS:
                 await asyncio.sleep(1 / self.FPS - (t - self.t_previous))
             self.t_previous = time.perf_counter()
-
             self.show_single_frame()
 
     def show_single_frame(self):
@@ -301,9 +300,9 @@ class Overview(Observer, tk.Frame):
             values=[k for k, v in dataclasses.asdict(frame).items() if v is not None]
         )
 
+        stream_name = self._selected_stream.get()
         try:
-            stream_name = self._selected_stream.get()
-            preview = getattr(frame, stream_name).copy()
+            preview = getattr(frame, stream_name)
         except AttributeError:
             logging.debug(f"Stream {stream_name} not available")
             self.live_canvas.clear_image()

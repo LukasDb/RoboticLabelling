@@ -95,6 +95,8 @@ class DemoCam(Camera):
         # img_path = next(self.img_paths)
         img_path = Path(f"{self.data_folder}/images/{self.img_index}.png")
         img = cv2.imread(str(img_path))  # type: ignore
+        if img is None:
+            return CamFrame()
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # type: ignore
         depth = None
 

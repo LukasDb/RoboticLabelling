@@ -77,7 +77,6 @@ class SettingsWidget(ttk.Frame):
                 self._private_vars[k] = v
             else:
                 self._set_var(k, v)
-        self.update()
 
     def _set_var(self, name, value):
         var = self.vars[name]

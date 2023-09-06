@@ -83,7 +83,7 @@ class EXR:
                         dtype=np_dtype,
                     )
                     .reshape((height, width))
-                    .copy()
+                    .copy()  # copy to avoid memoryview
                 )
 
         finally:

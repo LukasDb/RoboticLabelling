@@ -284,7 +284,7 @@ class CameraCalibrator(Observer):
         return img
 
     def _draw_cal_result(self, cam: Camera, cal_result: CalibrationDatapoint):
-        img = cal_result.img.copy()
+        img = cal_result.img.copy()  # dont change original image in calibration results!
 
         if cal_result.detected:
             corners = cal_result.corners
