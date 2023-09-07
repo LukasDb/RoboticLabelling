@@ -2,7 +2,6 @@ import tkinter as tk
 from tkinter import ttk
 import tkinter.filedialog as filedialog
 import numpy as np
-from io import IOBase
 import json
 import logging
 from pathlib import Path
@@ -10,7 +9,6 @@ import asyncio
 
 import robolabel as rl
 
-from typing import Any
 
 
 class App:
@@ -102,11 +100,8 @@ class App:
         elif "viewacquisition" in open_tab:
             self.scene.change_mode("acquisition")
 
-    @rl.as_async_task
-    async def _on_close(self):
+    def _on_close(self):
         logging.warning("Closing app...")
-        state_path = Path("app_state.config")
-        await self.save_state(state_path)
         self.stop = True
 
     def run(self):
@@ -117,9 +112,10 @@ class App:
         try:
             loop.run_until_complete(self._tk_updater())
         except KeyboardInterrupt:
-            loop.run_until_complete(self._on_close())
-        finally:
-            loop.close()
+            pass
+
+        state_path = Path("app_state.config")
+        self.save_state(state_path)
 
     async def _tk_updater(self):
         while not self.stop:
@@ -128,8 +124,6 @@ class App:
                 await asyncio.sleep(1 / 30)
             except Exception:
                 break
-
-        await asyncio.sleep(1.0)
         logging.info("Tk loop finished.")
 
     async def load_state(self, file: Path) -> None:
@@ -157,6 +151,7 @@ class App:
                 continue
             self.scene.robots[name].home_pose = np.array(pose)
 
+    @rl.as_async_task
     async def save_state(self, filepath: Path) -> None:
         data = {
             "camera_calibration": await self.calibrator.dump(),
@@ -186,8 +181,7 @@ class App:
         )
         await self.load_state(Path(file))
 
-    @rl.as_async_task
-    async def _on_save_config(self) -> None:
+    def _on_save_config(self) -> None:
         default_name = "scene"
 
         file_name = filedialog.asksaveasfilename(
@@ -202,7 +196,7 @@ class App:
             logging.error("Could not save file: %s", e)
             return
 
-        await self.save_state(filepath)
+        self.save_state(filepath)
 
     @rl.as_async_task
     async def _on_add_object(self) -> None:
