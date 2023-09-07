@@ -10,7 +10,6 @@ import asyncio
 import robolabel as rl
 
 
-
 class App:
     OVERVIEW = "overview"
     CAMERA_CALIBRATION = "camera_calibration"
@@ -51,7 +50,7 @@ class App:
         self.filemenu.add_command(label="Save...", command=self._on_save_config)
         self.filemenu.add_command(label="Load...", command=self._on_load_config)
         self.filemenu.add_separator()
-        self.filemenu.add_command(label="Exit", command=self.root.quit)
+        self.filemenu.add_command(label="Exit", command=self._on_close)
         self.menubar.add_cascade(label="File", menu=self.filemenu)
 
         self.objectmenu = tk.Menu(self.menubar, tearoff=0)
@@ -107,7 +106,7 @@ class App:
     def run(self):
         loop = asyncio.get_event_loop()
         state_path = Path("app_state.config")
-        loop.run_until_complete(self.load_state(state_path))
+        self.load_state(state_path)
 
         try:
             loop.run_until_complete(self._tk_updater())
@@ -126,6 +125,7 @@ class App:
                 break
         logging.info("Tk loop finished.")
 
+    @rl.as_async_task
     async def load_state(self, file: Path) -> None:
         try:
             with Path(file).open("r") as f:
@@ -173,13 +173,12 @@ class App:
         with filepath.open("w") as F:
             json.dump(data, F, indent=2)
 
-    @rl.as_async_task
-    async def _on_load_config(self):
+    def _on_load_config(self):
         file = filedialog.askopenfilename(
             title="Select Configuration file",
             filetypes=(("configuration files", "*.config"), ("all files", "*.*")),
         )
-        await self.load_state(Path(file))
+        self.load_state(Path(file))
 
     def _on_save_config(self) -> None:
         default_name = "scene"
