@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
+import time
 import tkinter.filedialog as filedialog
 import numpy as np
 import json
@@ -18,7 +19,6 @@ class App:
 
     def __init__(self) -> None:
         self.root = tk.Tk()
-        # self.tk_updater = loop.create_task(self._tk_updater(), name="TK Updater")
         self.stop = False
         self.root.title("Robotic Labelling")
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -27,6 +27,9 @@ class App:
 
         self.assemble_gui()
         self.populate_scene()
+
+        self.t_last = time.perf_counter()
+        self.FPS = 30
 
     def populate_scene(self):
         ## --- Assemble scene ---
@@ -125,6 +128,7 @@ class App:
         while not self.stop:
             try:
                 self.root.update()
+                await self.overview.update_live_preview()
                 await asyncio.sleep(1 / 30)
             except Exception:
                 break
@@ -147,7 +151,7 @@ class App:
                 obj_data["semantic_color"],
             )
 
-            obj.register_pose(np.array(obj_data["pose"]))
+            obj.pose = np.array(obj_data["pose"])
 
             self.scene.add_object(obj)
 

@@ -53,9 +53,7 @@ class PoseRegistration(rl.Observer):
         self.datapoints.clear()
 
     async def capture(self) -> Datapoint | None:
-        if self._scene.selected_camera is None:
-            logging.error("No camera selected")
-            return None
+        assert self._scene.selected_camera is not None, "No camera selected"
 
         # best settings
         cam_pose = await self._scene.selected_camera.pose
@@ -63,9 +61,7 @@ class PoseRegistration(rl.Observer):
         if frame.rgb is None or not self._scene.selected_camera.is_calibrated():
             return None
 
-        if frame.depth is None:
-            logging.error("Camera must have a depth channel")
-            return
+        assert frame.depth is not None, "Camera must have a depth channel"
 
         datapoint = Datapoint(
             rgb=frame.rgb,
@@ -78,18 +74,14 @@ class PoseRegistration(rl.Observer):
         self.datapoints.append(datapoint)
         return datapoint
 
-    async def capture_images(self) -> None:
-        if self._scene.selected_camera is None:
-            logging.error("No camera selected")
-            return None
+    async def capture_images(self, callback) -> None:
+        assert self._scene.selected_camera is not None, "No camera selected"
 
         trajectory_settings = TrajectorySettings(
             n_steps=20, view_jitter=0.0, z_cutoff=0.3, r_range=(0.35, 0.4), roll_range=(0, 0)
         )
         obj = self._scene.selected_object
-        if obj is None:
-            logging.error("No object selected")
-            return
+        assert obj is not None, "No object selected"
         center = (await obj.pose)[:3, 3]
 
         trajectory = self.trajectory_generator.generate_trajectory_above_center(
@@ -105,13 +97,12 @@ class PoseRegistration(rl.Observer):
             i += 1
             logging.debug(f"Reached {i}/{len(trajectory)}")
             await self.capture()
+            callback()
 
-    @rl.as_async_task
     async def optimize_pose(self) -> None:
         obj = self._scene.selected_object
-        if obj is None:
-            logging.error("No object selected")
-            return
+        assert obj is not None, "No object selected"
+
         obj.mesh.compute_vertex_normals()
         obj_points = obj.mesh.sample_points_poisson_disk(1000)
 
@@ -171,7 +162,7 @@ class PoseRegistration(rl.Observer):
         world2object = x.reshape((4, 4))
         logging.info(f"Result:\n{world2object}")
 
-        obj.register_pose(world2object)
+        obj.pose = world2object
 
     def move_pose(self, obj: rl.LabelledObject, x, y, z, rho, phi, theta):
         obj.pose = get_affine_matrix_from_euler([rho, phi, theta], [x, y, z])

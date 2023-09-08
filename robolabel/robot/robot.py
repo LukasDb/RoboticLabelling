@@ -4,6 +4,10 @@ import numpy.typing as npt
 from abc import ABC, abstractmethod
 
 
+class TargetNotReachedError(Exception):
+    pass
+
+
 class Robot(Entity, ABC):
     def __init__(self, name: str, home_pose: npt.NDArray[np.float64] | None = None) -> None:
         Entity.__init__(self, name)
@@ -23,8 +27,8 @@ class Robot(Entity, ABC):
         pass
 
     @abstractmethod
-    async def move_to(self, pose: npt.NDArray[np.float64], timeout: float) -> bool:
-        """move to a pose, return True if successful"""
+    async def move_to(self, pose: npt.NDArray[np.float64], timeout: float):
+        """move to a pose"""
         pass
 
     @abstractmethod

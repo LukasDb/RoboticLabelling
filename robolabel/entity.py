@@ -1,19 +1,6 @@
 import numpy as np
 import numpy.typing as npt
 from scipy.spatial.transform import Rotation as R
-import asyncio
-from typing import Callable, Any
-
-
-def as_async_task(coro: Callable[..., Any]) -> Callable[..., asyncio.Task[Any]]:
-    def async_wrapper(*args: Any, **kwargs: Any) -> asyncio.Task[Any]:
-        if asyncio.get_event_loop().is_running():
-            task = asyncio.create_task(coro(*args, **kwargs))
-        else:
-            task = asyncio.get_event_loop().run_until_complete(coro(*args, **kwargs))
-        return task
-
-    return async_wrapper
 
 
 class Entity:

@@ -1,4 +1,4 @@
-from .robot import Robot
+from .robot import Robot, TargetNotReachedError
 import asyncio
 
 # import requests
@@ -22,22 +22,14 @@ class FanucCRX10iAL(Robot):
         super().__init__(name="crx")
         self.session = aiohttp.ClientSession()
 
-    async def move_to(self, pose: np.ndarray, timeout=20) -> bool:
-        try:
-            t_started = time.time()
-            await self.send_move(pose)
-            while distance_from_matrices(await self.pose, pose) > 0.001:
-                await asyncio.sleep(0.2)
-                if time.time() - t_started > timeout:
-                    logging.error(f"Move timed out after {timeout} seconds")
-                    await self.stop()
-                    return False
-            return True
-
-        except Exception as e:
-            logging.error(f"Move failed: {e}")
-            await self.stop()
-            return False
+    async def move_to(self, pose: np.ndarray, timeout=20):
+        t_started = time.time()
+        await self.send_move(pose)
+        while distance_from_matrices(await self.pose, pose) > 0.001:
+            await asyncio.sleep(0.2)
+            if time.time() - t_started > timeout:
+                await self.stop()
+                raise TargetNotReachedError(f"Move timed out after {timeout} seconds")
 
     async def stop(self):
         await self.send_move(await self.pose, interrupt=True)

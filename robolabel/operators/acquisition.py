@@ -24,6 +24,15 @@ class Acquisition:
     def cancel(self) -> None:
         self._cancelled = True
 
+    async def _check_cancelled(self) -> bool:
+        if self._cancelled:
+            logging.info("Acquisition cancelled")
+            if self.robot is not None:
+                await self.robot.stop()
+            self._cancelled = False
+            return True
+        return False
+
     async def execute(
         self,
         cameras: list[rl.camera.Camera],
@@ -43,6 +52,7 @@ class Acquisition:
                     - write to dataset
         3. move to home pose
         """
+
         # check that all active cameras belong to the same robot
         if len(cameras) == 0:
             raise ValueError("No cameras selected")
@@ -50,9 +60,7 @@ class Acquisition:
         if len(set([c.robot for c in cameras])) != 1:
             raise ValueError("All selected cameras must be attached to the same robot")
 
-        if cameras[0].robot is None:
-            logging.error("Cameras must be attached to a a robot")
-            return
+        assert cameras[0].robot is not None, "Cameras must be attached to a a robot"
 
         self.robot = cameras[0].robot
         robot = self.robot
@@ -64,13 +72,13 @@ class Acquisition:
         if robot.home_pose is None:
             raise ValueError("Robot home pose is not set")
 
-        if not await robot.move_to(robot.home_pose, timeout=50):
-            logging.error("Failed to move robot to home pose")
-            return
+        await robot.move_to(robot.home_pose, timeout=50)
+
         logging.info("Reached home pose")
 
         await asyncio.sleep(0.2)
-        self._check_cancelled()
+        if await self._check_cancelled():
+            return
 
         for idx_trajectory, pose in enumerate(trajectory):
             # generate randomized bg and lights settings, to be re-used for all cameras
@@ -88,10 +96,10 @@ class Acquisition:
                 except AssertionError:
                     robot_target = pose
 
-                self._check_cancelled()
-                if not await robot.move_to(robot_target, timeout=30):
-                    logging.error("Failed to move robot to target pose")
+                if await self._check_cancelled():
                     return
+
+                await robot.move_to(robot_target, timeout=30)
 
                 for bg_step, light_step in it.product(bg_steps, light_steps):
                     if bg_monitor is not None:
@@ -99,18 +107,9 @@ class Acquisition:
                     if lights_controller is not None:
                         lights_controller.set_step(light_step)
 
-                    self._check_cancelled()
+                    if await self._check_cancelled():
+                        return
 
-                    await asyncio.sleep(1.0)  # settle robot
                     yield idx_trajectory, cam
 
-        if not await robot.move_to(robot.home_pose, timeout=50):
-            logging.error("Failed to move robot to home pose")
-            return
-
-    def _check_cancelled(self):
-        if self._cancelled:
-            if self.robot is not None:
-                self.robot.stop()
-            self._cancelled = False
-            raise RuntimeError("Cancelled")
+        await robot.move_to(robot.home_pose, timeout=50)

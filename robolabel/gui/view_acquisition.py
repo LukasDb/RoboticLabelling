@@ -120,7 +120,6 @@ class ViewAcquisition(tk.Frame, rl.Observer):
         self.start_acquisition.grid(column=0, sticky=tk.W, pady=pady)
         self.cancel_button.grid(column=0, sticky=tk.W, pady=pady)
 
-
     @rl.as_async_task
     async def _generate_trajectory(self) -> None:
         await self.trajectory_generator.generate_trajectory(

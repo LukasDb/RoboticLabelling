@@ -48,18 +48,15 @@ class Overview(rl.Observer, tk.Frame):
         self.preview.grid(column=0, row=1, sticky=tk.NSEW)
         self.controls.grid(column=1, row=1, sticky=tk.NSEW)
 
-        self.t_previous = time.perf_counter()
-        self.FPS = 3
-
-        # register task for updating the preview
-        self.preview_task = asyncio.get_event_loop().create_task(
-            self.live_preview(), name="Live preview"
-        )
+        self.FPS = 15
+        self.t_previous_update = time.perf_counter()
+        self.t_previous_frame = time.perf_counter()
+        self.previous_dts = [1 / self.FPS] * 10
 
     def destroy(self) -> None:
         # stop preview task
         logging.info("Cancelling preview task")
-        self.preview_task.cancel()
+        # self.preview_task.cancel()
         return super().destroy()
 
     def update_observer(self, subject, event: Event, *args, **kwargs):
@@ -71,27 +68,31 @@ class Overview(rl.Observer, tk.Frame):
         ]:
             # update calibrated column
             self._update_cam_table()
-            if event == Event.CAMERA_ADDED:
-                self.listen_to(kwargs["camera"])
+        if event in [Event.OBJECT_REMOVED, Event.OBJECT_ADDED]:
+            self._update_object_table()
 
+        if event == Event.CAMERA_ADDED:
+            self.listen_to(kwargs["camera"])
             available_cameras = [c.unique_id for c in self._scene.cameras.values()]
             self.camera_selection.configure(values=available_cameras)
+            if self.camera_selection.get() == "":
+                self.camera_selection.set(available_cameras[-1])
+                self._on_camera_selection_changed()
 
-        elif event in [Event.OBJECT_REMOVED, Event.OBJECT_REGISTERED, Event.OBJECT_ADDED]:
-            self._update_object_table()
+        if event == Event.OBJECT_ADDED:
+            self.listen_to(kwargs["object"])
             available_objects = [o.name for o in self._scene.objects.values()]
             self.object_selection.configure(values=available_objects)
+            if self.object_selection.get() == "":
+                self.object_selection.set(available_objects[-1])
+                self._on_object_selection_changed()
 
-            if event == Event.OBJECT_ADDED:
-                self.listen_to(kwargs["object"])
-            elif event == Event.OBJECT_REMOVED:
-                self.stop_listening(kwargs["object"])
-
-        elif event == Event.CAMERA_SELECTED:
+        if event == Event.CAMERA_SELECTED:
             frame = kwargs["camera"].get_frame(depth_quality=rl.camera.DepthQuality.UNCHANGED)
-            self.stream_selection.configure(
-                values=[k for k, v in dataclasses.asdict(frame).items() if v is not None]
-            )
+            streams = [k for k, v in dataclasses.asdict(frame).items() if v is not None]
+            self.stream_selection.configure(values=streams)
+            if self.stream_selection.get() == "" or self.stream_selection.get() not in streams:
+                self.stream_selection.set(streams[0])
 
     def setup_controls(self, master):
         control_frame = tk.Frame(master)
@@ -101,15 +102,15 @@ class Overview(rl.Observer, tk.Frame):
         camera_selection_label = tk.Label(cam_select_frame, text="Selected Camera")
         camera_selection_label.grid(row=0, column=0, padx=5, sticky=tk.NW)
 
-        self.camera_selection = ttk.Combobox(cam_select_frame, values=[])
+        self.camera_selection = ttk.Combobox(cam_select_frame)
         self.camera_selection.set("")
-        self.camera_selection.bind("<<ComboboxSelected>>", self._on_camera_selection_change)
+        self.camera_selection.bind(
+            "<<ComboboxSelected>>", lambda _: self._on_camera_selection_changed()
+        )
         self.camera_selection.grid(row=0, column=1, sticky=tk.NW, padx=5)
 
-        self.stream_selection = ttk.Combobox(
-            cam_select_frame, values=["rgb"], textvariable=self._selected_stream
-        )
-        self.stream_selection.set("rgb")
+        self.stream_selection = ttk.Combobox(cam_select_frame, textvariable=self._selected_stream)
+        self.stream_selection.set("")
         self.stream_selection.grid(
             row=0,
             column=2,
@@ -118,11 +119,11 @@ class Overview(rl.Observer, tk.Frame):
         )
 
         obj_select_frame = tk.Frame(control_frame)
-        self.object_selection = ttk.Combobox(
-            obj_select_frame, values=[o.name for o in self._scene.objects.values()]
-        )
+        self.object_selection = ttk.Combobox(obj_select_frame)
         self.object_selection.set("")
-        self.object_selection.bind("<<ComboboxSelected>>", self._on_object_selected)
+        self.object_selection.bind(
+            "<<ComboboxSelected>>", lambda _: self._on_object_selection_changed()
+        )
         object_selection_label = tk.Label(obj_select_frame, text="Selected Object")
         object_selection_label.grid(row=0, column=0, padx=5, sticky=tk.NW)
         self.object_selection.grid(row=0, column=1, sticky=tk.NW)
@@ -174,9 +175,8 @@ class Overview(rl.Observer, tk.Frame):
             (data_folder / "poses").mkdir(parents=True, exist_ok=True)
 
         cam = self._scene.selected_camera
-        if cam is None:
-            logging.error("No camera selected")
-            return
+        assert cam is not None, "No camera selected"
+
         idx = len(list(data_folder.glob("images/*.png")))
 
         frame = cam.get_frame(depth_quality=rl.camera.DepthQuality.INFERENCE)
@@ -255,11 +255,11 @@ class Overview(rl.Observer, tk.Frame):
             robot = self._scene.robots[w_robot.get()]
             await cam.attach(robot)
 
-    def _on_camera_selection_change(self, _):
+    def _on_camera_selection_changed(self):
         selected = self.camera_selection.get()
         self._scene.select_camera_by_id(selected)
 
-    def _on_object_selected(self, _):
+    def _on_object_selection_changed(self):
         selected = self.object_selection.get()
         self._scene.select_object_by_name(selected)
 
@@ -273,15 +273,30 @@ class Overview(rl.Observer, tk.Frame):
         while True:
             # framerate limiter
             t = time.perf_counter()
-            if (t - self.t_previous) < 1 / self.FPS:
-                await asyncio.sleep(1 / self.FPS - (t - self.t_previous))
-            self.t_previous = time.perf_counter()
+            if (t - self.t_previous_update) < 1 / self.FPS:
+                await asyncio.sleep(1 / self.FPS - (t - self.t_previous_update))
+            self.t_previous_update = time.perf_counter()
 
             await self.show_single_frame()
             # if we don't update the GUI in this loop, the FPS does not reflect the actual screen FPS
             self.live_canvas.update()
 
+    async def update_live_preview(self) -> None:
+        t = time.perf_counter()
+        if (t - self.t_previous_update) < 1 / self.FPS:
+            return  # yield to main loop
+        self.t_previous_update = time.perf_counter()
+        await self.show_single_frame()
+        self.live_canvas.update()
+
     async def show_single_frame(self):
+        # draw FPS in top left cornere
+        dt = time.perf_counter() - self.t_previous_frame
+        self.t_previous_frame = time.perf_counter()
+        self.previous_dts.pop()
+        self.previous_dts.insert(0, dt)
+        fps = 1 / np.mean(self.previous_dts)
+
         selected_cam = copy.copy(self._scene.selected_camera)
 
         if selected_cam is None:
@@ -310,13 +325,6 @@ class Overview(rl.Observer, tk.Frame):
             preview = await self._calibrator.draw_on_preview(selected_cam, preview)
             preview = await self._registration.draw_on_preview(selected_cam, preview)
 
-        # draw FPS in top left cornere
-        dt = time.perf_counter() - self.t_previous_frame
-        self.previous_dts.pop()
-        self.previous_dts.insert(0, dt)
-        fps = 1 / np.mean(self.previous_dts)
-
-        self.t_previous_frame = time.perf_counter()
         cv2.putText(  # type: ignore
             preview,
             f"{fps:.1f} FPS",

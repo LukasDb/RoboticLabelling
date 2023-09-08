@@ -77,22 +77,24 @@ class CameraCalibrator(rl.Observer):
     def reset(self) -> None:
         self.calibration_datapoints.clear()
 
-    async def load(self, cal_data: dict[str, Any]) -> None:
+    async def load(self, full_data: dict[str, Any]) -> None:
         """load calibration from config dict"""
-        self._scene.background.pose = np.array(cal_data["background_pose"])
+        self._scene.background.pose = np.array(full_data["background_pose"])
+        calibrations = {k: v for k, v in full_data.items() if k != "background_pose"}
 
-        for c in self._scene.cameras.values():
+        for unique_id, calibration in calibrations.items():
+            intrinsic_matrix = np.array(calibration["intrinsic"])
+            dist_coefficients = np.array(calibration["dist_coefficients"])
+            extrinsic_matrix = np.array(calibration["extrinsic"])
+            robot = calibration["attached_to"]
+
             try:
-                intrinsic_matrix = np.array(cal_data[c.unique_id]["intrinsic"])
-                dist_coefficients = np.array(cal_data[c.unique_id]["dist_coefficients"])
-                extrinsic_matrix = np.array(cal_data[c.unique_id]["extrinsic"])
-                robot = cal_data[c.unique_id]["attached_to"]
-                if robot != "none":
-                    await c.attach(self._scene.robots[robot])
-                c.set_calibration(intrinsic_matrix, dist_coefficients, extrinsic_matrix)
+                cam = self._scene.cameras[unique_id]
             except KeyError:
-                pass
-                # logging.info("No calibration data for camera", c.unique_id)
+                continue
+            if robot != "none":
+                await cam.attach(self._scene.robots[robot])
+            cam.set_calibration(intrinsic_matrix, dist_coefficients, extrinsic_matrix)
 
     async def dump(self) -> dict[str, Any]:
         """dump calibration as config dict"""
@@ -152,30 +154,17 @@ class CameraCalibrator(rl.Observer):
         self.camera.run_self_calibration()  # type: ignore
 
     async def capture(self):
-        if self.camera is None:
-            logging.error("No camera selected")
-            return
-        if self.camera.robot is None:
-            logging.error("Camera is not attached to a robot")
-            return
+        assert self.camera is not None, "No camera selected"
+        assert self.camera.robot is not None, "Camera is not attached to a robot"
 
         # since the depth is not used anyway
         robot_pose = await self.camera.robot.pose
         frame = self.camera.get_frame(depth_quality=rl.camera.DepthQuality.FASTEST)
 
-        assert frame.rgb is not None, "No image captured"
+        assert frame.rgb is not None, "Could not retrieve RGB image"
         img = frame.rgb
 
-        if img is None:
-            logging.error("No image captured")
-            return
-
-        if robot_pose is None:
-            logging.error("No robot pose available")
-            return
-
         calibration_result = self._detect_charuco(img, robot_pose)
-
         self.calibration_datapoints.append(calibration_result)
 
     async def capture_images(self, cb: Callable | None = None):

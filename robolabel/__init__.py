@@ -1,4 +1,5 @@
-from robolabel.entity import Entity, as_async_task
+from robolabel.task_queue import as_async_task
+from robolabel.entity import Entity
 from robolabel.observer import Observer, Observable, Event
 import robolabel.robot as robot
 import robolabel.camera as camera

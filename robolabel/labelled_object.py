@@ -18,10 +18,6 @@ class LabelledObject(rl.Observable, rl.Entity):
             semantic_color = np.random.randint(0, 255, size=3).tolist()
         self.semantic_color = semantic_color
 
-    def register_pose(self, pose):
-        self.pose = pose
-        self.notify(rl.Event.OBJECT_REGISTERED, object=self)
-
     @property
     def mesh(self):
         return self._mesh

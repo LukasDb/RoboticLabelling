@@ -1,6 +1,7 @@
 import asyncio
 import tkinter as tk
 from tkinter import ttk
+import logging
 
 import robolabel as rl
 from robolabel import Event
@@ -33,17 +34,12 @@ class ViewPoseRegistration(rl.Observer, ttk.Frame):
         if event == Event.OBJECT_ADDED:
             # configure choices for object selection
             self.listen_to(kwargs["object"])
-        elif event == Event.OBJECT_REMOVED:
+            self._update_gui()
+
+        if event == Event.OBJECT_REMOVED:
             # configure choices for object selection
             self.stop_listening(kwargs["object"])
-
-        if event in [
-            Event.OBJECT_REGISTERED,
-            Event.OBJECT_SELECTED,
-            Event.OBJECT_ADDED,
-            Event.MODE_CHANGED,
-        ]:
-            self._on_image_selection()
+            self._update_gui()
 
     def setup_controls(self, master) -> ttk.Frame:
         control_frame = ttk.Frame(master)
@@ -65,14 +61,14 @@ class ViewPoseRegistration(rl.Observer, ttk.Frame):
 
         self.image_selection = ttk.Combobox(control_frame)
         self.image_selection.bind(
-            sequence="<<ComboboxSelected>>", func=lambda _: self._on_image_selection()
+            sequence="<<ComboboxSelected>>", func=lambda _: self._update_gui()
         )
 
         # add button
         self.optimize_button = ttk.Button(
             control_frame,
             text="Optimize",
-            command=self.registration.optimize_pose,
+            command=self._on_optimize,
         )
         self.reset_pose_button = ttk.Button(
             control_frame,
@@ -166,34 +162,40 @@ class ViewPoseRegistration(rl.Observer, ttk.Frame):
 
             self.registration.move_pose(self.scene.selected_object, x, y, z, rho, phi, theta)
 
-            await self._update_gui()  # paint new mesh
+            self._update_gui()  # paint new mesh
 
     @rl.as_async_task
     async def _on_capture(self):
         await self.registration.capture()
-        await self._update_gui(set_to_last_image=True)
+        self._update_gui(set_to_last_image=True)
 
-    @rl.as_async_task
-    async def _on_automatic_acquisition(self):
-        await self.registration.capture_images()
-        await self._update_gui(set_to_last_image=True)
+    def _on_automatic_acquisition(self):
+        # check if asyncio task is already running
+        if "auto_registration" in [t.get_name() for t in asyncio.all_tasks()]:
+            logging.warn("Auto auto_registration already running!")
+            return
+
+        asyncio.get_event_loop().create_task(
+            self.registration.capture_images(lambda: self._update_gui(set_to_last_image=True)),
+            name="auto_registration",
+        )
 
     @rl.as_async_task
     async def _on_reset_pose(self):
         monitor_pose = self.scene.background.pose
         if self.scene.selected_object is not None:
             self.scene.selected_object.pose = await monitor_pose  # add this as initial position
-        await self._update_gui()
+        self._update_gui()
 
-    @rl.as_async_task
-    async def _on_image_selection(self):
-        await self._update_gui()
-
-    @rl.as_async_task
-    async def _on_reset(self):
+    def _on_reset(self):
         self.registration.reset()
-        await self._update_gui()
+        self._update_gui()
 
+    @rl.as_async_task
+    async def _on_optimize(self):
+        await self.registration.optimize_pose()
+
+    @rl.as_async_task
     async def _update_gui(self, set_to_last_image=False):
         if self.scene.selected_object is None:
             return

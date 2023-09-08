@@ -5,7 +5,7 @@ from typing import Any, ClassVar, Protocol
 
 
 _SupportedVarTypes = tk.BooleanVar | tk.StringVar | tk.IntVar
-_RowType = tk.Variable | list[_SupportedVarTypes] | tuple[_SupportedVarTypes]
+_RowType = _SupportedVarTypes | list[_SupportedVarTypes] | tuple[_SupportedVarTypes]
 
 
 class SettingsWidget(ttk.Frame):
@@ -43,9 +43,9 @@ class SettingsWidget(ttk.Frame):
 
         self.set_from_instance(dataclass())  # set defaults
 
-    def create_entry_widget(self, master: tk.Misc, row: int, column: int, dtype: type):
+    def create_entry_widget(self, master: tk.Misc, row: int, column: int, dtype: type) -> _RowType:
         """create a widget for a dataclass field"""
-
+        var: _RowType
         if dtype is int:
             var = tk.StringVar()
             widget = ttk.Spinbox(master, from_=-1000, to=1000, textvariable=var)
