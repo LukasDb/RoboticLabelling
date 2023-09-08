@@ -16,6 +16,7 @@ class TrajectorySettings:
     reach_dist_cutoff: float = 0.3  # how much to reach "behind" the objects
     min_robot_dist: float = 0.5  # minimum distance to the robot
     view_jitter: float = 0.05  # how much to jitter the view direction in m as offset of the center
+    roll_range: tuple[float, float] = (-180, 180)
 
 
 class TrajectoryGenerator:
@@ -123,7 +124,9 @@ class TrajectoryGenerator:
             view_pitch = -np.pi / 2 - np.arctan2(to_point[2], np.linalg.norm(to_point[:2]))
             towards_origin = R.from_euler("ZYX", [view_yaw, 0.0, view_pitch])
 
-            random_roll = R.from_euler("Z", np.random.uniform(-np.pi, np.pi)).as_matrix()
+            random_roll = R.from_euler(
+                "Z", np.random.uniform(*settings.roll_range), degrees=True
+            ).as_matrix()
             towards_origin = towards_origin.as_matrix() @ random_roll
 
             pose = np.eye(4)

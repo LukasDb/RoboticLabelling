@@ -65,6 +65,11 @@ class ViewCalibration(ttk.Frame):
             sequence="<<ComboboxSelected>>", func=lambda _: self._update_gui()
         )
 
+        self.self_calibrate_button = ttk.Button(
+            control_frame,
+            text="Run self-calibration",
+            command=self._on_self_calibrate,
+        )
         self.calibrate_button = ttk.Button(
             control_frame,
             text="Calibrate Intrinsics & Hand-Eye",
@@ -113,6 +118,7 @@ class ViewCalibration(ttk.Frame):
         guess_frame.grid(pady=pady, row=3, column=0, columnspan=3)
 
         self.calibrate_button.grid(pady=pady, row=4, column=0, columnspan=3)
+        self.self_calibrate_button.grid(pady=pady, row=5, column=0, columnspan=3)
 
         return control_frame
 
@@ -149,9 +155,16 @@ class ViewCalibration(ttk.Frame):
         await self.calibrator.capture()
         self._update_gui(set_to_last_image=True)
 
-    @rl.as_async_task
-    async def on_automatic_acquisition(self):
-        await self.calibrator.capture_images(lambda: self._update_gui(set_to_last_image=True))
+    def on_automatic_acquisition(self):
+        # check if asyncio task is already running
+        if "auto_calibration" in [t.get_name() for t in asyncio.all_tasks()]:
+            logging.warn("Auto calibration already running!")
+            return
+
+        asyncio.get_event_loop().create_task(
+            self.calibrator.capture_images(lambda: self._update_gui(set_to_last_image=True)),
+            name="auto_calibration",
+        )
 
     def on_delete(self):
         self.calibrator.reset()
@@ -169,3 +182,8 @@ class ViewCalibration(ttk.Frame):
             return
 
         self.calibrator.set_initial_guess(x, y, z)
+
+    @rl.as_async_task
+    async def _on_self_calibrate(self):
+        await self.calibrator.run_self_calibration()
+        self._update_gui(set_to_last_image=True)

@@ -3,28 +3,30 @@ import time
 import logging
 import asyncio
 import tkinter as tk
-
-from robolabel.camera import Camera
-from robolabel.robot import Robot
-from robolabel.labelled_object import LabelledObject
-from robolabel.operators.background_monitor import BackgroundMonitor, BackgroundSettings
-from robolabel.operators.lights_controller import LightsController, LightsSettings
-from .dataset_writer import DatasetWriter, WriterSettings
-from robolabel.lib.geometry import invert_homogeneous
 import itertools as it
 import asyncio
+
+import robolabel as rl
+from robolabel.operators import (
+    BackgroundMonitor,
+    BackgroundSettings,
+    LightsController,
+    LightsSettings,
+)
+from robolabel.lib.geometry import invert_homogeneous
 
 
 class Acquisition:
     def __init__(self) -> None:
         self._cancelled = False
+        self.robot: rl.robot.Robot | None = None
 
     def cancel(self) -> None:
         self._cancelled = True
 
     async def execute(
         self,
-        cameras: list[Camera],
+        cameras: list[rl.camera.Camera],
         trajectory: list[np.ndarray],
         bg_monitor: BackgroundMonitor | None = None,
         bg_settings: BackgroundSettings | None = None,
@@ -52,7 +54,8 @@ class Acquisition:
             logging.error("Cameras must be attached to a a robot")
             return
 
-        robot: Robot = cameras[0].robot
+        self.robot = cameras[0].robot
+        robot = self.robot
 
         logging.debug(
             f"Executing trajectory with:\n\t- {cameras}\n\t- {bg_settings}\n\t- {lights_settings}"
@@ -67,9 +70,7 @@ class Acquisition:
         logging.info("Reached home pose")
 
         await asyncio.sleep(0.2)
-        if self._cancelled:
-            self._cancelled = False
-            return
+        self._check_cancelled()
 
         for idx_trajectory, pose in enumerate(trajectory):
             # generate randomized bg and lights settings, to be re-used for all cameras
@@ -86,6 +87,8 @@ class Acquisition:
                     robot_target = pose @ invert_homogeneous(cam.extrinsic_matrix)
                 except AssertionError:
                     robot_target = pose
+
+                self._check_cancelled()
                 if not await robot.move_to(robot_target, timeout=30):
                     logging.error("Failed to move robot to target pose")
                     return
@@ -96,12 +99,18 @@ class Acquisition:
                     if lights_controller is not None:
                         lights_controller.set_step(light_step)
 
-                    if self._cancelled:
-                        self._cancelled = False
-                        return
+                    self._check_cancelled()
 
+                    await asyncio.sleep(1.0)  # settle robot
                     yield idx_trajectory, cam
 
         if not await robot.move_to(robot.home_pose, timeout=50):
             logging.error("Failed to move robot to home pose")
             return
+
+    def _check_cancelled(self):
+        if self._cancelled:
+            if self.robot is not None:
+                self.robot.stop()
+            self._cancelled = False
+            raise RuntimeError("Cancelled")

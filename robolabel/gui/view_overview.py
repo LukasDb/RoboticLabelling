@@ -1,4 +1,5 @@
 import tkinter as tk
+import copy
 import asyncio
 from tkinter import ttk
 from tkinter.colorchooser import askcolor
@@ -47,26 +48,8 @@ class Overview(rl.Observer, tk.Frame):
         self.preview.grid(column=0, row=1, sticky=tk.NSEW)
         self.controls.grid(column=1, row=1, sticky=tk.NSEW)
 
-        self._update_cam_table()
-        self._update_object_table()
-
-        cams = [c.unique_id for c in self._scene.cameras.values()]
-        self.camera_selection.configure(values=cams)
-        # listen to all cameras
-        for cam in self._scene.cameras.values():
-            self.listen_to(cam)
-
-        self.camera_selection.set(cams[-1])
-        self._on_camera_selection_change(None)
-
-        objs = [c.name for c in self._scene.objects.values()]
-        if len(objs) > 0:
-            self.object_selection.configure(values=objs)
-            self.object_selection.set(objs[-1])
-            self._on_object_selected(None)
-
         self.t_previous = time.perf_counter()
-        self.FPS = 20
+        self.FPS = 3
 
         # register task for updating the preview
         self.preview_task = asyncio.get_event_loop().create_task(
@@ -98,10 +81,17 @@ class Overview(rl.Observer, tk.Frame):
             self._update_object_table()
             available_objects = [o.name for o in self._scene.objects.values()]
             self.object_selection.configure(values=available_objects)
+
             if event == Event.OBJECT_ADDED:
                 self.listen_to(kwargs["object"])
             elif event == Event.OBJECT_REMOVED:
                 self.stop_listening(kwargs["object"])
+
+        elif event == Event.CAMERA_SELECTED:
+            frame = kwargs["camera"].get_frame(depth_quality=rl.camera.DepthQuality.UNCHANGED)
+            self.stream_selection.configure(
+                values=[k for k, v in dataclasses.asdict(frame).items() if v is not None]
+            )
 
     def setup_controls(self, master):
         control_frame = tk.Frame(master)
@@ -263,8 +253,7 @@ class Overview(rl.Observer, tk.Frame):
             cam.detach()
         else:
             robot = self._scene.robots[w_robot.get()]
-            link_mat = cam.extrinsic_matrix if cam.is_calibrated() else np.eye(4)
-            await cam.attach(robot, link_mat)
+            await cam.attach(robot)
 
     def _on_camera_selection_change(self, _):
         selected = self.camera_selection.get()
@@ -273,6 +262,10 @@ class Overview(rl.Observer, tk.Frame):
     def _on_object_selected(self, _):
         selected = self.object_selection.get()
         self._scene.select_object_by_name(selected)
+
+    @rl.as_async_task
+    async def _on_set_home(self, robot: rl.robot.Robot):
+        await robot.set_current_as_homepose()
 
     async def live_preview(self):
         self.t_previous_frame = time.perf_counter()
@@ -289,7 +282,7 @@ class Overview(rl.Observer, tk.Frame):
             self.live_canvas.update()
 
     async def show_single_frame(self):
-        selected_cam = self._scene.selected_camera
+        selected_cam = copy.copy(self._scene.selected_camera)
 
         if selected_cam is None:
             self.live_canvas.clear_image()
@@ -301,10 +294,6 @@ class Overview(rl.Observer, tk.Frame):
         except Exception as e:
             logging.error(f"Failed to get frame from camera: {e}")
             return
-
-        self.stream_selection.configure(
-            values=[k for k, v in dataclasses.asdict(frame).items() if v is not None]
-        )
 
         stream_name = self._selected_stream.get()
         try:

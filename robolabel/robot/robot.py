@@ -19,10 +19,14 @@ class Robot(Entity, ABC):
         self._pose = pose
 
     @abstractmethod
-    def set_current_as_homepose(self) -> None:
+    async def set_current_as_homepose(self) -> None:
         pass
 
     @abstractmethod
     async def move_to(self, pose: npt.NDArray[np.float64], timeout: float) -> bool:
         """move to a pose, return True if successful"""
+        pass
+
+    @abstractmethod
+    async def stop(self):
         pass

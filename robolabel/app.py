@@ -22,11 +22,13 @@ class App:
         self.stop = False
         self.root.title("Robotic Labelling")
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
-        self.scene = rl.Scene()
-        # --- load controllers ---
-        self.calibrator = rl.operators.CameraCalibrator(self.scene)
-        self.pose_registration = rl.operators.PoseRegistration(self.scene)
 
+        self.scene = rl.Scene()
+
+        self.assemble_gui()
+        self.populate_scene()
+
+    def populate_scene(self):
         ## --- Assemble scene ---
         # for testing
         mock_robot = rl.robot.MockRobot()
@@ -43,7 +45,7 @@ class App:
         for cam in rl.camera.ZedCamera.get_available_devices():
             self.scene.add_camera(cam)
 
-        ## ---  build GUI ---
+    def assemble_gui(self):
         self.menubar = tk.Menu(self.root)
         self.filemenu = tk.Menu(self.menubar, tearoff=0)
         # add save menu
@@ -57,13 +59,17 @@ class App:
         self.objectmenu.add_command(label="Add Object", command=self._on_add_object)
         self.menubar.add_cascade(label="Object", menu=self.objectmenu)
 
-        home_robot_menu = tk.Menu(self.menubar, tearoff=0)
-        for name, robot in self.scene.robots.items():
-            home_robot_menu.add_command(
-                label=f"Set {name} home pose",
-                command=lambda robot=robot: robot.set_current_as_homepose(),
-            )
-        self.menubar.add_cascade(label="Home Robot", menu=home_robot_menu)
+        # --- load controllers ---
+        self.calibrator = rl.operators.CameraCalibrator(self.scene)
+        self.pose_registration = rl.operators.PoseRegistration(self.scene)
+
+        # home_robot_menu = tk.Menu(self.menubar, tearoff=0)
+        # for name, robot in self.scene.robots.items():
+        #     home_robot_menu.add_command(
+        #         label=f"Set {name} home pose",
+        #         command=lambda robot=robot: self._on_set_home(robot),
+        #     )
+        # self.menubar.add_cascade(label="Home Robot", menu=home_robot_menu)
 
         self.root.config(menu=self.menubar)
         self.root.columnconfigure(0, weight=1)
@@ -87,7 +93,6 @@ class App:
 
         # register callback on tab change
         self.tabs.bind(sequence="<<NotebookTabChanged>>", func=lambda _: self._on_tab_change())
-        self._on_tab_change()
 
     def _on_tab_change(self):
         open_tab = self.tabs.select()
@@ -212,7 +217,7 @@ class App:
         obj_name = path.stem
         if obj_name in self.scene.objects:
             i = 1
-            while f"{obj_name}_{i}" in self.scene.objects:
+            while f"{obj_name}.{i:03}" in self.scene.objects:
                 i += 1
             obj_name = f"{obj_name}.{i:03}"
         new_object = rl.LabelledObject(obj_name, path)

@@ -76,8 +76,7 @@ class BackgroundMonitor(Entity):
         self._load_image_to_full_canvas(textured_path)
 
     def _load_image_to_full_canvas(self, path: pathlib.Path) -> None:
-        self.window.attributes("-fullscreen", True)
-        self.window.update()
+        self.setup_window(set_fullscreen=True)
         with path.open("rb") as f:
             bg = np.asarray(Image.open(f))
         # scale image to fill the screen
@@ -104,9 +103,11 @@ class BackgroundMonitor(Entity):
         x, y = self.window.winfo_x(), self.window.winfo_y()
         monitor = None
         for m in reversed(monitors):
-            if m.x <= x <= m.width + m.x and m.y <= y <= m.height + m.y:
+            if m.x <= x < m.width + m.x and m.y <= y < m.height + m.y:
                 monitor = m
                 break
+
+        logging.debug(f"Using monitor {monitor}")
 
         if monitor is None:
             logging.error("Could not find monitor for background monitor")
@@ -174,3 +175,6 @@ class BackgroundMonitor(Entity):
             3,  # negative == filled
             lineType=cv2.LINE_AA,  # type: ignore
         )
+        rvec, _ = cv2.Rodrigues(cam2monitor[:3, :3])  # type: ignore
+        tvec = cam2monitor[:3, 3]
+        cv2.drawFrameAxes(rgb, intrinsic, dist_coeffs, rvec, tvec, 0.1, 3)  # type: ignore

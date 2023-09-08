@@ -1,4 +1,5 @@
 import numpy as np
+import numpy.typing as npt
 import open3d as o3d
 import asyncio
 from tqdm import tqdm
@@ -44,6 +45,7 @@ class PoseRegistration(rl.Observer):
             if kwargs["mode"] == "registration":
                 self.reset()
                 self.is_active = True
+                self._scene.background.set_textured()  # easier to detect -> less noise
             else:
                 self.is_active = False
 
@@ -54,8 +56,6 @@ class PoseRegistration(rl.Observer):
         if self._scene.selected_camera is None:
             logging.error("No camera selected")
             return None
-
-        self._scene.background.set_textured()  # easier to detect -> less noise
 
         # best settings
         cam_pose = await self._scene.selected_camera.pose
@@ -84,7 +84,7 @@ class PoseRegistration(rl.Observer):
             return None
 
         trajectory_settings = TrajectorySettings(
-            n_steps=20, view_jitter=0.0, z_cutoff=0.4, r_range=(0.45, 0.5)
+            n_steps=20, view_jitter=0.0, z_cutoff=0.3, r_range=(0.35, 0.4), roll_range=(0, 0)
         )
         obj = self._scene.selected_object
         if obj is None:
@@ -96,7 +96,7 @@ class PoseRegistration(rl.Observer):
             center, trajectory_settings
         )
 
-        await self.trajectory_generator.visualize_trajectory(self._scene.selected_camera, [])
+        # await self.trajectory_generator.visualize_trajectory(self._scene.selected_camera, [])
 
         logging.debug("Starting acquisition for calibration...")
 
@@ -118,7 +118,7 @@ class PoseRegistration(rl.Observer):
         valid_campose_icp = []
         obj_pose = await obj.pose
         for datapoint in tqdm(self.datapoints, desc="ICP"):
-            initial_guess = np.linalg.inv(datapoint.pose) @ obj_pose
+            initial_guess = invert_homogeneous(datapoint.pose) @ obj_pose
             intrinsics = o3d.camera.PinholeCameraIntrinsic(
                 width=datapoint.depth.shape[1],
                 height=datapoint.depth.shape[0],
@@ -216,6 +216,11 @@ class PoseRegistration(rl.Observer):
         rvec, _ = cv2.Rodrigues(cam2obj[:3, :3])  # type: ignore
         tvec = cam2obj[:3, 3]
 
+        # draw frame
+        rgb = cv2.drawFrameAxes(  # type: ignore
+            rgb, cam_intrinsics, cam_dist_coeffs, rvec, tvec, 0.1, 3
+        )
+
         if obj.name not in self.mesh_cache:
             points = np.asarray(obj.mesh.vertices)
             points = np.asarray(obj.mesh.sample_points_poisson_disk(500).points)
@@ -283,15 +288,15 @@ class PoseRegistration(rl.Observer):
 
     def _optimize_object_pose(self, world2object, world2camera, camera2object):
         def residual(world2object_, world2camera, camera2object):
-            res = []
+            res: list[npt.NDArray[np.float64]] = []
             world2object = world2object_.reshape((4, 4))
             for i in range(len(world2camera)):
-                res += single_res_func(world2camera[i], camera2object[i], world2object)
-            return np.array(res).reshape(16 * len(world2camera))
+                res.append(single_res_func(world2camera[i], camera2object[i], world2object))
+            return np.array(res).reshape(16 * len(world2camera)) / len(world2camera)
 
         def single_res_func(world2camera, camera2object, world2object):
             res_array = world2camera @ camera2object - world2object
-            return [res_array.reshape((16,))]
+            return res_array.reshape((16,))
 
         ret = optimize.least_squares(
             residual,

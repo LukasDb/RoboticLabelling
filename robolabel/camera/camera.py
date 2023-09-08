@@ -53,11 +53,8 @@ class Camera(Entity, rl.Observable, ABC):
             pose = await self.robot.pose @ self._extrinsics
         return pose
 
-    async def attach(self, robot: rl.robot.Robot, link_matrix: npt.NDArray[np.float64]):
+    async def attach(self, robot: rl.robot.Robot):
         self.robot = robot
-        self._extrinsics = link_matrix
-        robot_pose = await self.robot.pose
-        self._pose = robot_pose @ self._extrinsics
         self.notify(Event.CAMERA_ATTACHED)
 
     def detach(self):

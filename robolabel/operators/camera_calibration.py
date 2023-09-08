@@ -2,6 +2,7 @@ import numpy as np
 import cv2
 from cv2 import aruco  # type: ignore
 from scipy import optimize
+from scipy.spatial.transform import Rotation as R
 import logging
 import dataclasses
 import numpy.typing as npt
@@ -42,7 +43,7 @@ class CameraCalibrator(rl.Observer):
         self.is_active = False
         self.calibration_datapoints: list[CalibrationDatapoint] = []
         self.mock_i = 0
-        self.camera: rl.camera.Camera | None = None
+        self.camera: rl.camera.Camera | None = self._scene.selected_camera
         self.markers2monitor = np.eye(4)
         self.trajectory_generator = rl.operators.TrajectoryGenerator()
         self.acquisition = rl.operators.Acquisition()
@@ -70,7 +71,7 @@ class CameraCalibrator(rl.Observer):
                 self.reset()
             assert "camera" in kwargs
             assert isinstance(kwargs["camera"], rl.camera.Camera)
-            self.camera: rl.camera.Camera | None = kwargs["camera"]
+            self.camera = kwargs["camera"]
             self.setup_charuco_board()
 
     def reset(self) -> None:
@@ -87,7 +88,7 @@ class CameraCalibrator(rl.Observer):
                 extrinsic_matrix = np.array(cal_data[c.unique_id]["extrinsic"])
                 robot = cal_data[c.unique_id]["attached_to"]
                 if robot != "none":
-                    await c.attach(self._scene.robots[robot], extrinsic_matrix)
+                    await c.attach(self._scene.robots[robot])
                 c.set_calibration(intrinsic_matrix, dist_coefficients, extrinsic_matrix)
             except KeyError:
                 pass
@@ -119,6 +120,37 @@ class CameraCalibrator(rl.Observer):
         self.initial_guess = np.array([x, y, z])
         logging.debug(f"Changed guess for background monitor to {self.initial_guess}")
 
+    async def run_self_calibration(self):
+        assert self.camera is not None, "No camera selected"
+        assert hasattr(
+            self.camera, "run_self_calibration"
+        ), "Camera does not support self calibration"
+        assert self.camera.robot is not None, "Camera is not attached to a robot"
+
+        target_position = self.initial_guess.copy()
+        target_position[2] += 0.6  # 60cm above monitor
+
+        target_pose = np.eye(4)
+        target_pose[:3, 3] = target_position
+
+        target_pose[:3, :3] = R.from_euler("y", 180, degrees=True).as_matrix()
+
+        if self.camera.is_calibrated():
+            # we can improve the position by using the calibration monitor pose
+            target_position = (await self._scene.background.get_position()).copy()
+            target_position[2] += 0.6  # 60cm above monitor
+            target_pose[:3, 3] = target_position
+
+            # and adjust for the camera flange link matrix
+            target_pose = target_pose @ invert_homogeneous(self.camera.extrinsic_matrix)
+
+        self._scene.background.set_textured()
+        if not await self.camera.robot.move_to(target_pose, timeout=50):
+            logging.error("Robot could not reach target position")
+            return
+
+        self.camera.run_self_calibration()  # type: ignore
+
     async def capture(self):
         if self.camera is None:
             logging.error("No camera selected")
@@ -149,13 +181,13 @@ class CameraCalibrator(rl.Observer):
     async def capture_images(self, cb: Callable | None = None):
         assert self.camera is not None, "No camera selected"
         trajectory_settings = rl.operators.TrajectorySettings(
-            n_steps=20, view_jitter=0.0, z_cutoff=0.4, r_range=(0.3, 0.6)
+            n_steps=20, view_jitter=0.0, z_cutoff=0.5, r_range=(0.4, 0.6)
         )
         trajectory = self.trajectory_generator.generate_trajectory_above_center(
             self.initial_guess, trajectory_settings
         )
 
-        await self.trajectory_generator.visualize_trajectory(self.camera, [])
+        # await self.trajectory_generator.visualize_trajectory(self.camera, [])
 
         logging.debug("Starting acquisition for calibration...")
 
@@ -270,7 +302,7 @@ class CameraCalibrator(rl.Observer):
         self.camera.set_calibration(camera_matrix, dist_coefficients, extrinsic_matrix)
 
     async def draw_on_preview(self, cam: rl.camera.Camera, rgb: np.ndarray) -> np.ndarray:
-        if not self.is_active:
+        if not self.is_active or cam.robot is None:
             return rgb
 
         robot_pose = await cam.robot.pose if cam.robot is not None else None
@@ -299,13 +331,11 @@ class CameraCalibrator(rl.Observer):
                 cv2.aruco.drawDetectedMarkers(img, corners, ids)  # type: ignore
 
         # if calibrated then also draw the monitor
+        world2cam = await cam.pose
         if cam.is_calibrated():
             monitor = self._scene.background
 
             # draw optimized calibration result
-            world2robot = cal_result.robot_pose
-            assert world2robot is not None, f"Robot pose missing, but camera {cam} is calibrated"
-            world2cam = world2robot @ cam.extrinsic_matrix
             cam2monitor = invert_homogeneous(world2cam) @ (await monitor.pose)
             monitor.visualize_monitor_in_camera_view(
                 img, cam.intrinsic_matrix, cam.dist_coefficients, cam2monitor
@@ -330,6 +360,8 @@ class CameraCalibrator(rl.Observer):
         width_m = self._scene.background.screen_width_m
         height = self._scene.background.screen_height
         height_m = self._scene.background.screen_height_m
+        chessboard_size = self.chessboard_size
+        marker_size = self.marker_size
 
         if isinstance(self.camera, rl.camera.DemoCam):
             # overwrite to monitor from lab (old demo data)
@@ -337,29 +369,29 @@ class CameraCalibrator(rl.Observer):
             height = 2160
             width = 3840
             diagonal_16_by_9 = np.linalg.norm((16, 9))
-            width_m = 16 / diagonal_16_by_9 * 0.800
-            height_m = 9 / diagonal_16_by_9 * 0.800
-            self.chessboard_size = 0.0286  # better 0.05 or bigger
-            self.marker_size = 0.023
+            width_m = 16 / diagonal_16_by_9 * 0.800  # 0.69726
+            height_m = 9 / diagonal_16_by_9 * 0.800  # 0.3922
+            chessboard_size = 0.0286  # better 0.05 or bigger
+            marker_size = 0.023
 
         pixel_w = width_m / width
         pixel_h = height_m / height
         logging.debug(f"Pixel dimensions: {pixel_w} x {pixel_h} m")
 
-        chessboard_size = self.chessboard_size // pixel_w * pixel_w  # in m
-        marker_size = self.marker_size // pixel_w * pixel_w
+        chessboard_size_scaled = chessboard_size // pixel_w * pixel_w  # in m
+        marker_size_scaled = marker_size // pixel_w * pixel_w
         n_markers = self.MARKERS  # x,y
 
         self.aruco_dict: Any = aruco.getPredefinedDictionary(self.CHARUCO_DICT)
         self.charuco_board: Any = aruco.CharucoBoard.create(
-            n_markers[0], n_markers[1], chessboard_size, marker_size, self.aruco_dict
+            n_markers[0], n_markers[1], chessboard_size, marker_size_scaled, self.aruco_dict
         )
 
         # create an appropriately sized image
-        charuco_img_width_m = n_markers[0] * chessboard_size  # in m
+        charuco_img_width_m = n_markers[0] * chessboard_size_scaled  # in m
         charuco_img_width = charuco_img_width_m / width_m * width  # in pixel
 
-        charuco_img_height_m = n_markers[1] * chessboard_size  # in m
+        charuco_img_height_m = n_markers[1] * chessboard_size_scaled  # in m
         charuco_img_height = charuco_img_height_m / height_m * height
 
         # charuco board is created with pixel_w as square size
@@ -392,8 +424,10 @@ class CameraCalibrator(rl.Observer):
         self.markers2monitor[0, 3] = charuco_img_width_m / 2.0
         self.markers2monitor[1, 3] = charuco_img_height_m / 2.0
 
-        logging.warn(f"Confirm the dimensions of the chessboard in the image: {chessboard_size}")
-        logging.warn(f"Confirm the dimensions of the markers in the image: {marker_size}")
+        logging.warn(
+            f"Confirm the dimensions of the chessboard in the image: {chessboard_size_scaled}"
+        )
+        logging.warn(f"Confirm the dimensions of the markers in the image: {marker_size_scaled}")
 
     def _optimize_handeye_matrix(self, camera_poses, robot_poses):
         camera2tool_t = np.zeros((6,))

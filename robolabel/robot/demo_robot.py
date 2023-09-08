@@ -9,8 +9,11 @@ class MockRobot(Robot):
     def __init__(self):
         super().__init__(name="mock")
 
-    def set_current_as_homepose(self) -> None:
-        self.home_pose = self._pose
+    async def set_current_as_homepose(self) -> None:
+        self.home_pose = await self.pose
+
+    async def stop(self):
+        pass
 
     @property
     async def pose(self) -> np.ndarray:
