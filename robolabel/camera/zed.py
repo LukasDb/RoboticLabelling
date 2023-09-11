@@ -2,8 +2,12 @@ from .camera import Camera, CamFrame, DepthQuality
 import numpy as np
 from typing import List
 import cv2
-import pyzed.sl as sl
 import logging
+
+try:
+    import pyzed.sl as sl
+except ModuleNotFoundError:
+    logging.error("Could not import pyzed. ZED cameras not available.")
 
 
 class ZedCamera(Camera):
@@ -17,6 +21,9 @@ class ZedCamera(Camera):
         logging.warn(
             "If you get segmentation fault here, reverse the USB type C cable on the ZED camera."
         )
+        if not "sl" in locals():
+            return cams
+
         dev_list = sl.Camera.get_device_list()
         for dev in dev_list:  # list[DeviceProperties]
             logging.info(f"Found device: {dev}")
