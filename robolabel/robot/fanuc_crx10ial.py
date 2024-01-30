@@ -16,7 +16,7 @@ logging.getLogger("requests").setLevel(logging.WARNING)
 
 
 class FanucCRX10iAL(Robot):
-    ROBOT_IP = "10.162.12.203"
+    ROBOT_IP = "192.168.1.100"
 
     def __init__(self) -> None:
         super().__init__(name="crx")
@@ -73,7 +73,11 @@ class FanucCRX10iAL(Robot):
             text = await resp.text()
         # data = json.loads(req.text)
 
-        data = json.loads(text)
+        try:
+            data = json.loads(text)
+        except Exception:
+            print(resp)
+            return await self.pose
         pose = self.__parse_remote_position(data)
         self._pose = pose
         return self._pose

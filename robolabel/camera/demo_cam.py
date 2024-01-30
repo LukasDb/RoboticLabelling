@@ -115,7 +115,7 @@ class DemoCam(Camera):
         if self.robot is not None:
             self.robot.pose = robot_pose
 
-            # whenever we move the robot, take a new image
+            # whenever we move the robot, choose a corresponding image
             async def move_to_with_cb(pose, timeout):
                 dists = {distance_from_matrices(pose, p): i for i, p in self.robot_poses.items()}
                 min_dist = np.min(list(dists.keys()))

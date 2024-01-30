@@ -121,10 +121,10 @@ class BackgroundMonitor(Entity):
         )
 
         # get screen size in mm
-        assert monitor.width_mm is not None, "Could not measure monitor!"
-        assert monitor.height_mm is not None, "Could not measure monitor!"
-        self.screen_width_m = monitor.width_mm / 1000.0
-        self.screen_height_m = monitor.height_mm / 1000.0
+        # assert monitor.width_mm is not None, "Could not measure monitor!"
+        # assert monitor.height_mm is not None, "Could not measure monitor!"
+        self.screen_width_m = None if monitor.width_mm is None else monitor.width_mm / 1000.0
+        self.screen_height_m = None if monitor.height_mm is None else monitor.height_mm / 1000.0
         logging.debug(
             f"Setting window up for screen with ({self.screen_width_m}, {self.screen_height_m}) meters"
         )
@@ -140,6 +140,13 @@ class BackgroundMonitor(Entity):
         self, rgb, intrinsic, dist_coeffs, cam2monitor, color=(0, 255, 0)
     ):
         """Draw the background monitor on the rgb image"""
+        rvec, _ = cv2.Rodrigues(cam2monitor[:3, :3])  # type: ignore
+        tvec = cam2monitor[:3, 3]
+        cv2.drawFrameAxes(rgb, intrinsic, dist_coeffs, rvec, tvec, 0.1, 3)  # type: ignore
+        
+        if self.screen_height_m is None or self.screen_width_m is None:
+            return
+        
         half_w = self.screen_width_m / 2.0
         half_h = self.screen_height_m / 2.0
 
@@ -175,6 +182,3 @@ class BackgroundMonitor(Entity):
             3,  # negative == filled
             lineType=cv2.LINE_AA,  # type: ignore
         )
-        rvec, _ = cv2.Rodrigues(cam2monitor[:3, :3])  # type: ignore
-        tvec = cam2monitor[:3, 3]
-        cv2.drawFrameAxes(rgb, intrinsic, dist_coeffs, rvec, tvec, 0.1, 3)  # type: ignore

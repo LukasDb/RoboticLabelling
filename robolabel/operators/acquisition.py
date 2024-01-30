@@ -101,6 +101,8 @@ class Acquisition:
 
                 await robot.move_to(robot_target, timeout=30)
 
+                await asyncio.sleep(1.0)
+
                 for bg_step, light_step in it.product(bg_steps, light_steps):
                     if bg_monitor is not None:
                         bg_monitor.set_step(bg_step)

@@ -45,8 +45,8 @@ class App:
         for cam in rl.camera.Realsense.get_available_devices():
             self.scene.add_camera(cam)
 
-        for cam in rl.camera.ZedCamera.get_available_devices():
-            self.scene.add_camera(cam)
+        #for cam in rl.camera.ZedCamera.get_available_devices():
+        #    self.scene.add_camera(cam)
 
     def assemble_gui(self):
         self.menubar = tk.Menu(self.root)

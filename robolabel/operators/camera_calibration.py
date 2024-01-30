@@ -352,7 +352,7 @@ class CameraCalibrator(rl.Observer):
         chessboard_size = self.chessboard_size
         marker_size = self.marker_size
 
-        if isinstance(self.camera, rl.camera.DemoCam):
+        if width_m is None or height_m is None or isinstance(self.camera, rl.camera.DemoCam):
             # overwrite to monitor from lab (old demo data)
             logging.warn("USING MOCK MONITOR DIMENSIONS")
             height = 2160

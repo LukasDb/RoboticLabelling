@@ -122,7 +122,7 @@ class DatasetWriter:
             hq_depth = self.hq_depths[cam][idx_trajectory]
             hq_depth_R = self.hq_depths_R[cam][idx_trajectory]
         except KeyError:
-            logging.error(f"Missing pre-acquisition data for!")
+            logging.error(f"Missing pre-acq♫♫uisition data for!")
             raise
 
         assert frame.rgb is not None, "RGB frame is None"
