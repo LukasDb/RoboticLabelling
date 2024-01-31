@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
+from typing import Any
 
 
 class WidgetList(ttk.Frame):
@@ -7,13 +8,13 @@ class WidgetList(ttk.Frame):
 
     def __init__(
         self,
-        master,
+        master: tk.Misc,
         *,
         column_names: list[str] | None = None,
         columns: list[type[ttk.Widget | tk.Widget]],
-        **kwargs
+        **kwargs: Any
     ) -> None:
-        defaults = {"borderwidth": 2, "relief": tk.GROOVE}
+        defaults: dict[str, Any] = {"borderwidth": 2, "relief": tk.GROOVE}
         defaults.update(kwargs)
         super().__init__(
             master,
@@ -54,12 +55,12 @@ class WidgetList(ttk.Frame):
         self.rows.append(tuple(row_tuple))
         return tuple(row_tuple)
 
-    def pop(self, index):
+    def pop(self, index: int) -> None:
         row = self.rows.pop(index)
         for w in row:
             w.destroy()
 
-    def clear(self):
+    def clear(self) -> None:
         for row in self.rows:
             for w in row:
                 w.destroy()

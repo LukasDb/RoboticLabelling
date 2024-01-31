@@ -5,6 +5,7 @@ import asyncio
 import tkinter as tk
 import itertools as it
 import asyncio
+from typing import AsyncGenerator
 
 import robolabel as rl
 from robolabel.operators import (
@@ -13,12 +14,13 @@ from robolabel.operators import (
     LightsController,
     LightsSettings,
 )
-from robolabel.lib.geometry import invert_homogeneous
+from robolabel.geometry import invert_homogeneous
 
 
-class Acquisition:
-    def __init__(self) -> None:
+class TrajectoryExecutor:
+    def __init__(self, scene: rl.Scene) -> None:
         self._cancelled = False
+        self._scene = scene
         self.robot: rl.robot.Robot | None = None
 
     def cancel(self) -> None:
@@ -37,11 +39,9 @@ class Acquisition:
         self,
         cameras: list[rl.camera.Camera],
         trajectory: list[np.ndarray],
-        bg_monitor: BackgroundMonitor | None = None,
         bg_settings: BackgroundSettings | None = None,
-        lights_controller: LightsController | None = None,
         lights_settings: LightsSettings | None = None,
-    ):
+    ) -> AsyncGenerator[tuple[int, rl.camera.Camera], None]:
         """executes given trajectory for the selected camera
         1. move to home pose
         2. for each trajectory point:
@@ -83,17 +83,14 @@ class Acquisition:
         for idx_trajectory, pose in enumerate(trajectory):
             # generate randomized bg and lights settings, to be re-used for all cameras
 
-            bg_steps = [None] if bg_monitor is None else bg_monitor.get_steps(bg_settings)
-            light_steps = (
-                [None]
-                if lights_controller is None
-                else lights_controller.get_steps(lights_settings)
-            )
+            bg_steps = self._scene.background.get_steps(bg_settings)
+            light_steps = self._scene.lights.get_steps(lights_settings)
 
             for cam in cameras:
-                try:
+                if cam.extrinsic_matrix is not None:
                     robot_target = pose @ invert_homogeneous(cam.extrinsic_matrix)
-                except AssertionError:
+                else:
+                    logging.warning("Camera extrinsic matrix is not set, using pose from robot!")
                     robot_target = pose
 
                 if await self._check_cancelled():
@@ -104,10 +101,8 @@ class Acquisition:
                 await asyncio.sleep(1.0)
 
                 for bg_step, light_step in it.product(bg_steps, light_steps):
-                    if bg_monitor is not None:
-                        bg_monitor.set_step(bg_step)
-                    if lights_controller is not None:
-                        lights_controller.set_step(light_step)
+                    self._scene.background.set_step(bg_step)
+                    self._scene.lights.set_step(light_step)
 
                     if await self._check_cancelled():
                         return

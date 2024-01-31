@@ -1,16 +1,17 @@
 import asyncio
+from typing import Any
 import tkinter as tk
 from tkinter import ttk
 import logging
 
 import robolabel as rl
 from robolabel import Event
-from robolabel.lib.geometry import get_euler_from_affine_matrix
+from robolabel.geometry import get_euler_from_affine_matrix
 
 
 class ViewPoseRegistration(rl.Observer, ttk.Frame):
     def __init__(
-        self, master, scene: rl.Scene, registration: rl.operators.PoseRegistration
+        self, master: tk.Misc, scene: rl.Scene, registration: rl.operators.PoseRegistration
     ) -> None:
         ttk.Frame.__init__(self, master)
         self.scene = scene
@@ -25,12 +26,14 @@ class ViewPoseRegistration(rl.Observer, ttk.Frame):
         self.rowconfigure(1, weight=1)
 
         controls = self.setup_controls(self)
-        self.preview = rl.ResizableImage(self, bg="#000000")
+        self.preview = rl.lib.ResizableImage(self, bg="#000000")
 
         controls.grid(row=1, column=1, sticky=tk.NSEW)
         self.preview.grid(row=1, column=0, sticky=tk.NSEW)
 
-    def update_observer(self, subject: rl.Observable, event: Event, *args, **kwargs):
+    def update_observer(
+        self, subject: rl.Observable, event: Event, *args: Any, **kwargs: Any
+    ) -> None:
         if event == Event.OBJECT_ADDED:
             # configure choices for object selection
             self.listen_to(kwargs["object"])
@@ -41,7 +44,7 @@ class ViewPoseRegistration(rl.Observer, ttk.Frame):
             self.stop_listening(kwargs["object"])
             self._update_gui()
 
-    def setup_controls(self, master) -> ttk.Frame:
+    def setup_controls(self, master: tk.Misc) -> ttk.Frame:
         control_frame = ttk.Frame(master)
 
         self.capture_button = ttk.Button(
@@ -140,11 +143,10 @@ class ViewPoseRegistration(rl.Observer, ttk.Frame):
 
         return control_frame
 
-    @rl.as_async_task
-    async def _change_initial_guess(self):
+    def _change_initial_guess(self) -> None:
         if self.scene.selected_object is not None:
             (rho, phi, theta), (x, y, z) = get_euler_from_affine_matrix(
-                await self.scene.selected_object.pose
+                self.scene.selected_object.get_pose()
             )
 
             if self.manual_pose_x.get():
@@ -164,12 +166,17 @@ class ViewPoseRegistration(rl.Observer, ttk.Frame):
 
             self._update_gui()  # paint new mesh
 
-    @rl.as_async_task
-    async def _on_capture(self):
-        await self.registration.capture()
-        self._update_gui(set_to_last_image=True)
+    def _on_capture(self) -> None:
+        async def capture_and_update() -> None:
+            await self.registration.capture()
+            self._update_gui(set_to_last_image=True)
 
-    def _on_automatic_acquisition(self):
+        asyncio.get_event_loop().create_task(
+            capture_and_update(),
+            name="capture_image",
+        )
+
+    def _on_automatic_acquisition(self) -> None:
         # check if asyncio task is already running
         if "auto_registration" in [t.get_name() for t in asyncio.all_tasks()]:
             logging.warn("Auto auto_registration already running!")
@@ -180,28 +187,25 @@ class ViewPoseRegistration(rl.Observer, ttk.Frame):
             name="auto_registration",
         )
 
-    @rl.as_async_task
-    async def _on_reset_pose(self):
-        monitor_pose = self.scene.background.pose
+    def _on_reset_pose(self) -> None:
+        monitor_pose = self.scene.background.get_pose()
         if self.scene.selected_object is not None:
-            self.scene.selected_object.pose = await monitor_pose  # add this as initial position
+            self.scene.selected_object.set_pose(monitor_pose)  # add this as initial position
         self._update_gui()
 
-    def _on_reset(self):
+    def _on_reset(self) -> None:
         self.registration.reset()
         self._update_gui()
 
-    @rl.as_async_task
-    async def _on_optimize(self):
-        await self.registration.optimize_pose()
+    def _on_optimize(self) -> None:
+        self.registration.optimize_pose()
 
-    @rl.as_async_task
-    async def _update_gui(self, set_to_last_image=False):
+    def _update_gui(self, set_to_last_image: bool = False) -> None:
         if self.scene.selected_object is None:
             return
 
         (rho, phi, theta), (x, y, z) = get_euler_from_affine_matrix(
-            await self.scene.selected_object.pose
+            self.scene.selected_object.get_pose()
         )
 
         self.manual_pose_x.set(float(x))  # set first spinbox values to current pose
@@ -227,7 +231,7 @@ class ViewPoseRegistration(rl.Observer, ttk.Frame):
             selected_index = int(selected.split(" ")[-1])
         except ValueError:
             return
-        img = await self.registration.get_from_image_cache(selected_index)
+        img = self.registration.get_from_image_cache(selected_index)
 
         if img is not None:
             self.preview.set_image(img)

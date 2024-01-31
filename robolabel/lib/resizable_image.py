@@ -12,8 +12,8 @@ class ResizableImage(tk.Canvas):
         master: tk.Misc,
         image: None | npt.NDArray[np.uint8] = None,
         mode: Literal["stretch", "zoom", "fit"] = "fit",
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         tk.Canvas.__init__(self, master, kwargs)
         self._canvas_img = self.create_image(0, 0, anchor=tk.NW)
         self._img: npt.NDArray[np.uint8] | None = None
@@ -22,7 +22,7 @@ class ResizableImage(tk.Canvas):
             self._img = image.copy()
         self.bind(sequence="<Configure>", func=self._on_refresh)
 
-    def _on_refresh(self, event=None):
+    def _on_refresh(self, event: None | tk.Event = None) -> None:
         if event is not None:
             self.widget_width = int(event.width)
             self.widget_height = int(event.height)
@@ -54,12 +54,12 @@ class ResizableImage(tk.Canvas):
         self._img_tk = ImageTk.PhotoImage(Image.fromarray(img_resized))
         self.itemconfig(self._canvas_img, image=self._img_tk)  # , anchor=tk.CENTER)
 
-    def set_image(self, image: np.ndarray):
+    def set_image(self, image: np.ndarray) -> None:
         self._img = image
         if self._canvas_img not in self.children:
             self._canvas_img = self.create_image(0, 0, anchor=tk.NW)
         self._on_refresh()  # resize to canvas
 
-    def clear_image(self):
+    def clear_image(self) -> None:
         if self.winfo_exists():
             self.delete(self._canvas_img)

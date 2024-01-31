@@ -2,10 +2,6 @@ import asyncio
 import tkinter as tk
 from tkinter import ttk
 import logging
-from PIL import ImageTk, Image
-import numpy as np
-import cv2
-import time
 
 import robolabel as rl
 
@@ -14,7 +10,9 @@ class ViewCalibration(ttk.Frame):
     PREVIEW_WIDTH = 640
     PREVIEW_HEIGHT = 480
 
-    def __init__(self, master, scene: rl.Scene, calibrator: rl.operators.CameraCalibrator) -> None:
+    def __init__(
+        self, master: tk.Misc, scene: rl.Scene, calibrator: rl.operators.CameraCalibrator
+    ) -> None:
         ttk.Frame.__init__(self, master)
         self.scene = scene
         self.calibrator = calibrator
@@ -32,7 +30,7 @@ class ViewCalibration(ttk.Frame):
         self.control_frame.grid(row=1, column=1, sticky=tk.NSEW)
         self.preview_frame.grid(row=1, column=0, sticky=tk.NSEW)
 
-    def setup_controls(self, master):
+    def setup_controls(self, master: tk.Misc) -> ttk.Frame:
         control_frame = ttk.Frame(master)
 
         self.btn_setup = ttk.Button(
@@ -122,16 +120,15 @@ class ViewCalibration(ttk.Frame):
 
         return control_frame
 
-    def setup_previews(self):
+    def setup_previews(self) -> ttk.Frame:
         preview_frame = ttk.Frame(self)
         preview_frame.rowconfigure(0, weight=1)
         preview_frame.columnconfigure(0, weight=1)
-        self.selected_image_canvas = rl.ResizableImage(preview_frame, bg="#000000")
+        self.selected_image_canvas = rl.lib.ResizableImage(preview_frame, bg="#000000")
         self.selected_image_canvas.grid(sticky=tk.NSEW)
         return preview_frame
 
-    @rl.as_async_task
-    async def _update_gui(self, set_to_last_image=False):
+    def _update_gui(self, set_to_last_image: bool = False) -> None:
         if len(self.calibrator.calibration_datapoints) == 0:
             return
         self.image_selection["values"] = [
@@ -146,16 +143,21 @@ class ViewCalibration(ttk.Frame):
         except ValueError:
             return
 
-        img = await self.calibrator.get_from_image_cache(selected_index)
+        img = self.calibrator.get_from_image_cache(selected_index)
         if img is not None:
             self.selected_image_canvas.set_image(img)
 
-    @rl.as_async_task
-    async def capture_image(self):
-        await self.calibrator.capture()
-        self._update_gui(set_to_last_image=True)
+    def capture_image(self) -> None:
+        async def capture_and_update() -> None:
+            await self.calibrator.capture()
+            self._update_gui(set_to_last_image=True)
 
-    def on_automatic_acquisition(self):
+        asyncio.get_event_loop().create_task(
+            capture_and_update(),
+            name="capture_image",
+        )
+
+    def on_automatic_acquisition(self) -> None:
         # check if asyncio task is already running
         if "auto_calibration" in [t.get_name() for t in asyncio.all_tasks()]:
             logging.warn("Auto calibration already running!")
@@ -166,13 +168,13 @@ class ViewCalibration(ttk.Frame):
             name="auto_calibration",
         )
 
-    def on_delete(self):
+    def on_delete(self) -> None:
         self.calibrator.reset()
         self.image_selection["values"] = []
         self.image_selection.set("")
         self.selected_image_canvas.clear_image()
 
-    def _change_initial_guess(self):
+    def _change_initial_guess(self) -> None:
         try:
             x = float(self.guess_x.get())  # user inputs in spinbox
             y = float(self.guess_y.get())
@@ -183,7 +185,12 @@ class ViewCalibration(ttk.Frame):
 
         self.calibrator.set_initial_guess(x, y, z)
 
-    @rl.as_async_task
-    async def _on_self_calibrate(self):
-        await self.calibrator.run_self_calibration()
-        self._update_gui(set_to_last_image=True)
+    def _on_self_calibrate(self) -> None:
+        async def calibrate_and_update() -> None:
+            await self.calibrator.run_self_calibration()
+            self._update_gui(set_to_last_image=True)
+
+        asyncio.get_event_loop().create_task(
+            calibrate_and_update(),
+            name="self_calibration",
+        )

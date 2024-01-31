@@ -6,7 +6,7 @@ import numpy.typing as npt
 
 
 import robolabel as rl
-from robolabel import Event, Entity
+from robolabel import Event, AsyncEntity
 
 
 @dataclass
@@ -30,12 +30,12 @@ class DepthQuality(Enum):
     UNCHANGED = auto()
 
 
-class Camera(Entity, rl.Observable, ABC):
+class Camera(AsyncEntity, rl.Observable, ABC):
     width: int
     height: int
 
     def __init__(self, name: str):
-        Entity.__init__(self, name)
+        AsyncEntity.__init__(self, name)
         rl.Observable.__init__(self)
 
         self.robot: rl.robot.Robot | None = None
@@ -45,19 +45,18 @@ class Camera(Entity, rl.Observable, ABC):
         self._intrinsics: npt.NDArray[np.float64] | None = None
         self._dist_coeffs: npt.NDArray[np.float64] | None = None
 
-    @property
-    async def pose(self) -> npt.NDArray[np.float64]:
+    async def get_pose(self) -> np.ndarray:
         if self.robot is None or self._extrinsics is None:
             pose = self._pose
         else:
-            pose = await self.robot.pose @ self._extrinsics
+            pose = await self.robot.get_pose() @ self._extrinsics
         return pose
 
-    async def attach(self, robot: rl.robot.Robot):
+    def attach(self, robot: rl.robot.Robot) -> None:
         self.robot = robot
         self.notify(Event.CAMERA_ATTACHED)
 
-    def detach(self):
+    def detach(self) -> None:
         self.robot = None
         self._extrinsics = None
         self.notify(Event.CAMERA_CALIBRATED)
@@ -68,21 +67,18 @@ class Camera(Entity, rl.Observable, ABC):
         return ""
 
     @property
-    def intrinsic_matrix(self):
-        assert self._intrinsics is not None
+    def intrinsic_matrix(self) -> np.ndarray | None:
         return self._intrinsics
 
     @property
-    def extrinsic_matrix(self):
-        assert self._extrinsics is not None
+    def extrinsic_matrix(self) -> np.ndarray | None:
         return self._extrinsics
 
     @property
-    def dist_coefficients(self):
-        assert self._dist_coeffs is not None
+    def dist_coefficients(self) -> np.ndarray | None:
         return self._dist_coeffs
 
-    def is_calibrated(self):
+    def is_calibrated(self) -> bool:
         return (
             self._intrinsics is not None
             and self._dist_coeffs is not None
@@ -94,7 +90,7 @@ class Camera(Entity, rl.Observable, ABC):
         intrinsic_matrix: npt.NDArray[np.float64],
         dist_coeffs: npt.NDArray[np.float64],
         extrinsic_matrix: npt.NDArray[np.float64],
-    ):
+    ) -> None:
         self._intrinsics = intrinsic_matrix
         self._dist_coeffs = dist_coeffs
         self._extrinsics = extrinsic_matrix

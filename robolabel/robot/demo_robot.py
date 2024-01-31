@@ -6,24 +6,18 @@ import time
 
 
 class MockRobot(Robot):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(name="mock")
+        self.home_pose = np.eye(4)
 
     async def set_current_as_homepose(self) -> None:
-        self.home_pose = await self.pose
+        self.home_pose = await self.get_pose()
 
-    async def stop(self):
+    async def stop(self) -> None:
         pass
 
-    @property
-    async def pose(self) -> np.ndarray:
-        return self._pose
-
-    @pose.setter
-    def pose(self, pose: np.ndarray) -> None:
-        self._pose = pose
-
-    async def move_to(self, pose: np.ndarray, timeout: float = 1.0):
+    async def move_to(self, pose: np.ndarray, timeout: float = 1.0) -> bool:
         await asyncio.sleep(0.5)
         self._pose = pose
         logging.info(f"{self.name} moved to pose: {pose[:3, 3]}")
+        return True

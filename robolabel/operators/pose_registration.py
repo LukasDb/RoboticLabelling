@@ -1,7 +1,9 @@
 import numpy as np
+from typing import Any
 import numpy.typing as npt
 import open3d as o3d
 import asyncio
+from typing import Callable
 from tqdm import tqdm
 from scipy.spatial.transform import Rotation as R
 import cv2
@@ -10,9 +12,9 @@ from scipy import optimize
 import logging
 
 import robolabel as rl
-from robolabel.operators import TrajectoryGenerator, TrajectorySettings, Acquisition
+from robolabel.operators import TrajectoryGenerator, TrajectorySettings, TrajectoryExecutor
 from robolabel.observer import Event
-from robolabel.lib.geometry import (
+from robolabel.geometry import (
     invert_homogeneous,
     get_affine_matrix_from_euler,
 )
@@ -35,12 +37,14 @@ class PoseRegistration(rl.Observer):
         self._scene = scene
         self.listen_to(self._scene)
         self.is_active = False
-        self.mesh_cache = {}
+        self.mesh_cache: dict[str, o3d.geometry.TriangleMesh] = {}
         self.datapoints: list[Datapoint] = []
         self.trajectory_generator = TrajectoryGenerator()
-        self.acquisition = Acquisition()
+        self.acquisition = TrajectoryExecutor(scene)
 
-    def update_observer(self, subject: rl.Observable, event: Event, *args, **kwargs):
+    def update_observer(
+        self, subject: rl.Observable, event: Event, *args: Any, **kwargs: Any
+    ) -> None:
         if event == Event.MODE_CHANGED:
             if kwargs["mode"] == "registration":
                 self.reset()
@@ -56,9 +60,13 @@ class PoseRegistration(rl.Observer):
         assert self._scene.selected_camera is not None, "No camera selected"
 
         # best settings
-        cam_pose = await self._scene.selected_camera.pose
+        cam_pose = await self._scene.selected_camera.get_pose()
         frame = self._scene.selected_camera.get_frame(depth_quality=rl.camera.DepthQuality.GT)
-        if frame.rgb is None or not self._scene.selected_camera.is_calibrated():
+        if (
+            frame.rgb is None
+            or self._scene.selected_camera.intrinsic_matrix is None
+            or self._scene.selected_camera.dist_coefficients is None
+        ):
             return None
 
         assert frame.depth is not None, "Camera must have a depth channel"
@@ -74,7 +82,7 @@ class PoseRegistration(rl.Observer):
         self.datapoints.append(datapoint)
         return datapoint
 
-    async def capture_images(self, callback) -> None:
+    async def capture_images(self, callback: Callable) -> None:
         assert self._scene.selected_camera is not None, "No camera selected"
 
         trajectory_settings = TrajectorySettings(
@@ -82,7 +90,7 @@ class PoseRegistration(rl.Observer):
         )
         obj = self._scene.selected_object
         assert obj is not None, "No object selected"
-        center = (await obj.pose)[:3, 3]
+        center = obj.get_pose()[:3, 3]
 
         trajectory = self.trajectory_generator.generate_trajectory_above_center(
             center, trajectory_settings
@@ -99,7 +107,7 @@ class PoseRegistration(rl.Observer):
             await self.capture()
             callback()
 
-    async def optimize_pose(self) -> None:
+    def optimize_pose(self) -> None:
         obj = self._scene.selected_object
         assert obj is not None, "No object selected"
 
@@ -107,7 +115,7 @@ class PoseRegistration(rl.Observer):
         obj_points = obj.mesh.sample_points_poisson_disk(1000)
 
         valid_campose_icp = []
-        obj_pose = await obj.pose
+        obj_pose = obj.get_pose()
         for datapoint in tqdm(self.datapoints, desc="ICP"):
             initial_guess = invert_homogeneous(datapoint.pose) @ obj_pose
             intrinsics = o3d.camera.PinholeCameraIntrinsic(
@@ -151,8 +159,8 @@ class PoseRegistration(rl.Observer):
 
         ret = self._optimize_object_pose(
             obj_pose,
-            [x[0] for x in valid_campose_icp],
-            [x[1] for x in valid_campose_icp],
+            np.array([x[0] for x in valid_campose_icp]),
+            np.array([x[1] for x in valid_campose_icp]),
         )
 
         logging.info("Done")
@@ -162,12 +170,21 @@ class PoseRegistration(rl.Observer):
         world2object = x.reshape((4, 4))
         logging.info(f"Result:\n{world2object}")
 
-        obj.pose = world2object
+        obj.set_pose(world2object)
 
-    def move_pose(self, obj: rl.LabelledObject, x, y, z, rho, phi, theta):
-        obj.pose = get_affine_matrix_from_euler([rho, phi, theta], [x, y, z])
+    def move_pose(
+        self,
+        obj: rl.LabelledObject,
+        x: float,
+        y: float,
+        z: float,
+        rho: float,
+        phi: float,
+        theta: float,
+    ) -> None:
+        obj.set_pose(get_affine_matrix_from_euler((rho, phi, theta), (x, y, z)))
 
-    async def get_from_image_cache(self, index):
+    def get_from_image_cache(self, index: int) -> np.ndarray | None:
         try:
             datapoint: Datapoint = self.datapoints[index]
         except IndexError:
@@ -175,7 +192,7 @@ class PoseRegistration(rl.Observer):
 
         img = datapoint.rgb.copy()
         if self._scene.selected_object is not None:
-            img = await self.draw_registered_object(
+            img = self.draw_registered_object(
                 self._scene.selected_object,
                 img,
                 datapoint.pose,
@@ -185,25 +202,25 @@ class PoseRegistration(rl.Observer):
 
         return img
 
-    async def draw_on_preview(self, cam: rl.camera.Camera, rgb: np.ndarray):
-        if not self.is_active or not cam.is_calibrated():
+    async def draw_on_preview(self, cam: rl.camera.Camera, rgb: np.ndarray) -> np.ndarray:
+        if not self.is_active or cam.intrinsic_matrix is None or cam.dist_coefficients is None:
             return rgb
 
         for obj in self._scene.objects.values():
-            await self.draw_registered_object(
-                obj, rgb, await cam.pose, cam.intrinsic_matrix, cam.dist_coefficients
+            self.draw_registered_object(
+                obj, rgb, await cam.get_pose(), cam.intrinsic_matrix, cam.dist_coefficients
             )
         return rgb
 
-    async def draw_registered_object(
+    def draw_registered_object(
         self,
         obj: rl.LabelledObject,
         rgb: np.ndarray,
         cam_pose: np.ndarray,
         cam_intrinsics: np.ndarray,
         cam_dist_coeffs: np.ndarray,
-    ):
-        cam2obj = invert_homogeneous(cam_pose) @ (await obj.pose)
+    ) -> np.ndarray:
+        cam2obj = invert_homogeneous(cam_pose) @ obj.get_pose()
         rvec, _ = cv2.Rodrigues(cam2obj[:3, :3])  # type: ignore
         tvec = cam2obj[:3, 3]
 
@@ -245,8 +262,14 @@ class PoseRegistration(rl.Observer):
         return rgb
 
     def _draw_tracking_arrow(
-        self, rgb: np.ndarray, rvec, tvec, cam_intrinsics, cam_dist_coeffs, color
-    ):
+        self,
+        rgb: np.ndarray,
+        rvec: np.ndarray,
+        tvec: np.ndarray,
+        cam_intrinsics: np.ndarray,
+        cam_dist_coeffs: np.ndarray,
+        color: np.ndarray,
+    ) -> None:
         centroid = np.array([0.0, 0.0, 0.0])
         projected_center = cv2.projectPoints(  # type: ignore
             centroid, rvec, tvec, cam_intrinsics, cam_dist_coeffs
@@ -277,15 +300,21 @@ class PoseRegistration(rl.Observer):
         )
         cv2.arrowedLine(rgb, arrow_start, arrow_end, color, arrow_thickness)  # type: ignore
 
-    def _optimize_object_pose(self, world2object, world2camera, camera2object):
-        def residual(world2object_, world2camera, camera2object):
+    def _optimize_object_pose(
+        self, world2object: np.ndarray, world2camera: np.ndarray, camera2object: np.ndarray
+    ) -> Any:
+        def residual(
+            world2object_: np.ndarray, world2camera: np.ndarray, camera2object: np.ndarray
+        ) -> np.ndarray:
             res: list[npt.NDArray[np.float64]] = []
             world2object = world2object_.reshape((4, 4))
             for i in range(len(world2camera)):
                 res.append(single_res_func(world2camera[i], camera2object[i], world2object))
             return np.array(res).reshape(16 * len(world2camera)) / len(world2camera)
 
-        def single_res_func(world2camera, camera2object, world2object):
+        def single_res_func(
+            world2camera: np.ndarray, camera2object: np.ndarray, world2object: np.ndarray
+        ) -> Any:
             res_array = world2camera @ camera2object - world2object
             return res_array.reshape((16,))
 

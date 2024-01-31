@@ -6,7 +6,9 @@ import robolabel as rl
 
 
 class LabelledObject(rl.Observable, rl.Entity):
-    def __init__(self, name, mesh_path: Path, semantic_color=None):
+    def __init__(
+        self, name: str, mesh_path: Path, semantic_color: np.ndarray | None = None
+    ) -> None:
         rl.Entity.__init__(self, name=name)
         rl.Observable.__init__(self)
         mesh = o3d.io.read_triangle_mesh(str(mesh_path.resolve()))
@@ -14,16 +16,18 @@ class LabelledObject(rl.Observable, rl.Entity):
 
         self.mesh_path = mesh_path
 
-        if semantic_color is None:
-            semantic_color = np.random.randint(0, 255, size=3).tolist()
-        self.semantic_color = semantic_color
+        self.semantic_color: np.ndarray = (
+            np.random.randint(0, 255, size=3).tolist()
+            if semantic_color is None
+            else semantic_color
+        )
 
     @property
-    def mesh(self):
+    def mesh(self) -> o3d.geometry.TriangleMesh:
         return self._mesh
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"LabelledObject({self.name})"
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"LabelledObject({self.name})"

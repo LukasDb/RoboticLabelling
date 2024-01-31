@@ -2,7 +2,7 @@ import open3d as o3d
 import logging
 from robolabel.labelled_object import LabelledObject
 from robolabel.camera import Camera
-from robolabel.lib.geometry import invert_homogeneous
+from robolabel.geometry import invert_homogeneous
 import numpy as np
 from dataclasses import dataclass
 from scipy.spatial.transform import Rotation as R
@@ -20,10 +20,10 @@ class TrajectorySettings:
 
 
 class TrajectoryGenerator:
-    def __init__(self):
-        self._current_trajectory = None
+    def __init__(self) -> None:
+        self._current_trajectory: None | list[np.ndarray] = None
 
-    async def generate_trajectory(
+    def generate_trajectory(
         self, active_objects: list[LabelledObject], settings: TrajectorySettings
     ) -> list[np.ndarray] | None:
         """generates a trajectory based on the selected objects.
@@ -32,12 +32,12 @@ class TrajectoryGenerator:
         """
         if len(active_objects) == 0:
             logging.warning("No objects selected, cannot generate trajectory")
-            return
+            return []
 
         if self._current_trajectory is not None:
             logging.warning("Overwriting current trajectory")
 
-        object_positions = np.array([await o.get_position() for o in active_objects])
+        object_positions = np.array([o.get_position() for o in active_objects])
         center = np.mean(object_positions, axis=0)
         return self.generate_trajectory_above_center(center, settings)
 
@@ -52,7 +52,7 @@ class TrajectoryGenerator:
         center_normed = center / center_dist
 
         # rejection sampling of points on the sphere
-        positions = []
+        sphere_points = []
         for rot in rots:
             r = (
                 np.sqrt(np.random.uniform(0.0, 1.0)) * (settings.r_range[1] - settings.r_range[0])
@@ -71,15 +71,15 @@ class TrajectoryGenerator:
             if np.linalg.norm(pos[:2]) < settings.min_robot_dist:
                 continue
 
-            positions.append(pos)
+            sphere_points.append(pos)
 
         # downsample the points to the required number of steps
         pcl = o3d.geometry.PointCloud()
-        pcl.points = o3d.utility.Vector3dVector(positions)
+        pcl.points = o3d.utility.Vector3dVector(sphere_points)
         positions = np.asarray(pcl.farthest_point_down_sample(settings.n_steps).points)
 
         # resort the positions to always go to the closest one
-        arranged_positions = []
+        sorted_positions = []
         candidates = list(range(len(positions)))
 
         # current_i = np.random.choice(np.arange(len(positions)))
@@ -90,7 +90,7 @@ class TrajectoryGenerator:
             candidates.remove(current_i)
             current_pos = positions[current_i]
 
-            arranged_positions.append(current_pos)
+            sorted_positions.append(current_pos)
 
             if candidates == []:
                 break
@@ -101,11 +101,9 @@ class TrajectoryGenerator:
             closest = np.argmin(dists)
             current_i = candidates[closest]
 
-        positions = arranged_positions
-
         # generate poses from positions
         trajectory = []
-        for pos in positions:
+        for pos in sorted_positions:
             # jitter applies only to the view direction (orientation)
             if isinstance(settings.view_jitter, float):
                 view_center = center + np.random.uniform(
@@ -138,7 +136,7 @@ class TrajectoryGenerator:
         self._current_trajectory = trajectory
         return trajectory
 
-    async def visualize_trajectory(self, camera: Camera, objects: list[LabelledObject]) -> None:
+    def visualize_trajectory(self, camera: Camera, objects: list[LabelledObject]) -> None:
         assert self._current_trajectory is not None, "Generate trajectory first"
 
         w, h = camera.width, camera.height
@@ -176,7 +174,7 @@ class TrajectoryGenerator:
             mesh = o3d.geometry.TriangleMesh(obj.mesh)
             mesh.compute_vertex_normals()
             mesh.paint_uniform_color(np.array(obj.semantic_color) / 255.0)
-            mesh.transform(await obj.pose)
+            mesh.transform(obj.get_pose())
             object_meshes.append(mesh)
 
         o3d.visualization.draw_geometries([*vis_views, lines, origin, *object_meshes])  # type: ignore

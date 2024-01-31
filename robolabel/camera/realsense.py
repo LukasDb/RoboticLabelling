@@ -1,11 +1,11 @@
+import cv2
 from .camera import Camera, CamFrame, DepthQuality
 import numpy as np
-from typing import List
-import cv2
 import json
 from pathlib import Path
 import pyrealsense2 as rs
 import logging
+import threading
 
 # mappings
 occ_speed_map = {
@@ -35,7 +35,7 @@ class Realsense(Camera):
     DEPTH_W = 1280
 
     @staticmethod
-    def get_available_devices() -> List["Realsense"]:
+    def get_available_devices() -> list["Realsense"]:
         ctx = rs.context()  # type: ignore
         devices = ctx.query_devices()
         cams = []
@@ -49,9 +49,10 @@ class Realsense(Camera):
 
         return cams
 
-    def __init__(self, serial_number):
+    def __init__(self, serial_number: str) -> None:
         self._serial_number = serial_number
         self._depth_quality = DepthQuality.INFERENCE
+        self._lock = threading.Lock()
 
         self._pipeline = rs.pipeline()  # type: ignore
         self._config = config = rs.config()  # type: ignore
@@ -95,10 +96,9 @@ class Realsense(Camera):
         logging.debug(f"[{self.name}] Loading configuration: {profile_path.name}")
         rs.rs400_advanced_mode(self.device).load_json(profile_path.read_text())  # type: ignore
 
-
         self.sensor = self.device.first_depth_sensor()
         self.depth_scale = self.sensor.get_depth_scale()
-        
+
         self.sensor.set_option(rs.option.hdr_enabled, False)  # type: ignore
 
         # Start streaming
@@ -107,50 +107,51 @@ class Realsense(Camera):
         self.is_started = True
 
     def get_frame(self, depth_quality: DepthQuality) -> CamFrame:
-        if depth_quality != DepthQuality.UNCHANGED and depth_quality != self._depth_quality:
-            self._depth_quality = depth_quality
-            # if depth_quality is DepthQuality.GT:
-            #     self.sensor.set_option(rs.option.hdr_enabled, True)  # type: ignore
-            # elif depth_quality is DepthQuality.INFERENCE:
-            #     self.sensor.set_option(rs.option.hdr_enabled, False)  # type: ignore
+        with self._lock:
+            if depth_quality != DepthQuality.UNCHANGED and depth_quality != self._depth_quality:
+                self._depth_quality = depth_quality
+                # if depth_quality is DepthQuality.GT:
+                #     self.sensor.set_option(rs.option.hdr_enabled, True)  # type: ignore
+                # elif depth_quality is DepthQuality.INFERENCE:
+                #     self.sensor.set_option(rs.option.hdr_enabled, False)  # type: ignore
 
-        output = CamFrame()
-        if not self.is_started:
+            output = CamFrame()
+            if not self.is_started:
+                return output
+            try:
+                frames = self._pipeline.wait_for_frames()
+            except Exception as e:
+                logging.error(f"Could not get camera frame: {e}")
+                self.device.hardware_reset()
+                self._pipeline.start(self._config)
+                return output
+
+            # makes depth frame same resolution as rgb frame
+            aligned_frames = self.align_to_rgb.process(frames)
+
+            color_frame = aligned_frames.get_color_frame()
+            depth_frame = aligned_frames.get_depth_frame()
+            if not depth_frame or not color_frame:
+                logging.warn("Could not get camera frame")
+                return output
+
+            if False:  # self._depth_quality in [DepthQuality.INFERENCE, DepthQuality.GT]:
+                depth_frame = self.temporal_filter.process(depth_frame)
+                depth_frame = self.spatial_filter.process(depth_frame)
+
+            depth_image = np.asarray(depth_frame.get_data()).astype(np.float32) * self.depth_scale
+            color_image = np.asarray(color_frame.get_data())  # type: ignore
+
+            output.depth = depth_image
+            output.rgb = color_image
+
             return output
-        try:
-            frames = self._pipeline.wait_for_frames()
-        except Exception as e:
-            logging.error(f"Could not get camera frame: {e}")
-            self.device.hardware_reset()
-            self._pipeline.start(self._config)
-            return output
-
-        # makes depth frame same resolution as rgb frame
-        frames = self.align_to_rgb.process(frames)
-
-        color_frame = frames.get_color_frame()
-        depth_frame = frames.get_depth_frame()
-        if not depth_frame or not color_frame:
-            logging.warn("Could not get camera frame")
-            return output
-
-        if self._depth_quality in [DepthQuality.INFERENCE, DepthQuality.GT]:
-            depth_frame = self.temporal_filter.process(depth_frame)
-            depth_frame = self.spatial_filter.process(depth_frame)
-
-        depth_image = np.asarray(depth_frame.get_data()).astype(np.float32) * self.depth_scale
-        color_image = np.asarray(color_frame.get_data())  # type: ignore
-
-        output.depth = depth_image
-        output.rgb = color_image
-
-        return output
 
     @property
     def unique_id(self) -> str:
         return "realsense_" + str(self._serial_number)
 
-    def run_self_calibration(self):
+    def run_self_calibration(self) -> None:
         """run on-chip calibration of realsense."""
         logging.warn(
             "Full automatic calibration is not supported yet. Please manually calibrate the camera (from realsense-viewer)."

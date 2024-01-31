@@ -16,7 +16,7 @@ class ZedCamera(Camera):
 
     @staticmethod
     def get_available_devices() -> List["ZedCamera"]:
-        cams = []
+        cams: List["ZedCamera"] = []
         logging.info("Getting ZED devices...")
         logging.warn(
             "If you get segmentation fault here, reverse the USB type C cable on the ZED camera."
@@ -30,7 +30,7 @@ class ZedCamera(Camera):
             cams.append(ZedCamera(dev.serial_number))
         return cams
 
-    def __init__(self, serial_number):
+    def __init__(self, serial_number: str) -> None:
         self._serial_number = serial_number
 
         self.init_params = sl.InitParameters()
@@ -79,10 +79,10 @@ class ZedCamera(Camera):
     def unique_id(self) -> str:
         return "zed_" + str(self._serial_number)
 
-    def _set_hq_depth(self):
+    def _set_hq_depth(self) -> None:
         self.is_hq_depth = True
         # TODO possibly change other parameters, too
 
-    def _set_lq_depth(self):
+    def _set_lq_depth(self) -> None:
         self.is_hq_depth = False
         # TODO possibly change other parameters, too

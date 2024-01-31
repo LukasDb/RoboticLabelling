@@ -1,22 +1,21 @@
 from .background_monitor import BackgroundMonitor, BackgroundSettings
 from .lights_controller import LightsController, LightsSettings
 
-from .acquisition import Acquisition
+from .trajectory_executor import TrajectoryExecutor
 from .trajectory_generator import TrajectoryGenerator, TrajectorySettings
 from .camera_calibration import CameraCalibrator
 from .pose_registration import PoseRegistration
-from .dataset_writer import DatasetWriter, WriterSettings
-
+from .data_acquisition import DataAcquisition, AcquisitionSettings
 
 
 __all__ = [
     "CameraCalibrator",
     "PoseRegistration",
-    "DatasetWriter",
-    "WriterSettings",
+    "DataAcquisition",
+    "AcquisitionSettings",
     "TrajectoryGenerator",
     "TrajectorySettings",
-    "Acquisition",
+    "TrajectoryExecutor",
     "BackgroundMonitor",
     "BackgroundSettings",
     "LightsController",

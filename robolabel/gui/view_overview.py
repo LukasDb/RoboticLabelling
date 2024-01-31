@@ -1,10 +1,11 @@
+import asyncio
 import tkinter as tk
 import copy
-import asyncio
+import functools
 from tkinter import ttk
 from tkinter.colorchooser import askcolor
 from pathlib import Path
-from typing import Dict
+from typing import Any
 import logging
 import numpy as np
 import time
@@ -13,12 +14,13 @@ import dataclasses
 
 import robolabel as rl
 from robolabel import Event
+from robolabel.observer import Observable
 
 
 class Overview(rl.Observer, tk.Frame):
     def __init__(
         self,
-        master,
+        master: tk.Misc,
         scene: rl.Scene,
         calibrator: rl.operators.CameraCalibrator,
         registration: rl.operators.PoseRegistration,
@@ -32,8 +34,8 @@ class Overview(rl.Observer, tk.Frame):
 
         self._selected_stream = tk.StringVar()
 
-        self.cam_list: rl.WidgetList
-        self.object_list: rl.WidgetList
+        self.cam_list: rl.lib.WidgetList
+        self.object_list: rl.lib.WidgetList
 
         self.title = ttk.Label(self, text="Overview")
         self.controls = self.setup_controls(self)
@@ -48,7 +50,7 @@ class Overview(rl.Observer, tk.Frame):
         self.preview.grid(column=0, row=1, sticky=tk.NSEW)
         self.controls.grid(column=1, row=1, sticky=tk.NSEW)
 
-        self.FPS = 15
+        self.FPS = 10
         self.t_previous_update = time.perf_counter()
         self.t_previous_frame = time.perf_counter()
         self.previous_dts = [1 / self.FPS] * 10
@@ -59,7 +61,9 @@ class Overview(rl.Observer, tk.Frame):
         # self.preview_task.cancel()
         return super().destroy()
 
-    def update_observer(self, subject, event: Event, *args, **kwargs):
+    def update_observer(
+        self, subject: Observable, event: Event, *args: Any, **kwargs: Any
+    ) -> None:
         if event in [
             Event.CAMERA_CALIBRATED,
             Event.CAMERA_ATTACHED,
@@ -94,7 +98,7 @@ class Overview(rl.Observer, tk.Frame):
             if self.stream_selection.get() == "" or self.stream_selection.get() not in streams:
                 self.stream_selection.set(streams[0])
 
-    def setup_controls(self, master):
+    def setup_controls(self, master: tk.Misc) -> tk.Frame:
         control_frame = tk.Frame(master)
         control_frame.columnconfigure(0, weight=1)
 
@@ -134,12 +138,12 @@ class Overview(rl.Observer, tk.Frame):
         self.capture_name.grid(row=0, column=0)
         capture_button.grid(row=0, column=1)
 
-        self.cam_list = rl.WidgetList(
+        self.cam_list = rl.lib.WidgetList(
             control_frame,
             column_names=["Camera", "Calibrated?", "Attached"],
             columns=[tk.Label, tk.Label, ttk.Combobox],
         )
-        self.object_list = rl.WidgetList(
+        self.object_list = rl.lib.WidgetList(
             control_frame,
             column_names=["Object", "Color", "Remove"],
             columns=[tk.Label, tk.Label, ttk.Button],
@@ -152,15 +156,15 @@ class Overview(rl.Observer, tk.Frame):
         self.object_list.grid(sticky=tk.NSEW, pady=10)
         return control_frame
 
-    def setup_preview(self, master):
+    def setup_preview(self, master: tk.Misc) -> ttk.Frame:
         preview_frame = ttk.Frame(master)
         preview_frame.columnconfigure(0, weight=1)
         preview_frame.rowconfigure(0, weight=1)
-        self.live_canvas = rl.ResizableImage(preview_frame, bg="#000000")
+        self.live_canvas = rl.lib.ResizableImage(preview_frame, bg="#000000")
         self.live_canvas.grid(sticky=tk.NSEW)
         return preview_frame
 
-    async def _on_capture(self):
+    async def _on_capture(self) -> None:
         # save image for use in demo cam + robot pose
         data_name = self.capture_name.get()
         if data_name == "":
@@ -181,7 +185,7 @@ class Overview(rl.Observer, tk.Frame):
 
         frame = cam.get_frame(depth_quality=rl.camera.DepthQuality.INFERENCE)
         if cam.robot is not None:
-            robot_pose = await cam.robot.pose
+            robot_pose = await cam.robot.get_pose()
             np.savetxt(str(data_folder / f"poses/{idx}.txt"), robot_pose)
         if frame.rgb is not None:
             cv2.imwrite(  # type: ignore
@@ -192,7 +196,7 @@ class Overview(rl.Observer, tk.Frame):
 
     def _update_cam_table(self) -> None:
         for i, cam in enumerate(self._scene.cameras.values()):
-            kwargs_list = [
+            kwargs_list: list[dict[str, Any]] = [
                 {"text": f"{cam.name} ({cam.unique_id})"},
                 {
                     "text": "Yes" if cam.is_calibrated() else "No",
@@ -210,11 +214,16 @@ class Overview(rl.Observer, tk.Frame):
 
             w_robot: ttk.Combobox = row_widgets[2]  # type: ignore
             w_robot.bind(
-                sequence="<<ComboboxSelected>>",
-                func=lambda event, cam_unique_id=cam.unique_id, robot=w_robot: self._on_attach_cam(
-                    cam_unique_id, robot
-                ),
+                "<<ComboboxSelected>>",
+                functools.partial(self._on_attach_cam, cam_id=cam.unique_id, w_robot=w_robot),
             )
+
+            # w_robot.bind(
+            #     sequence="<<ComboboxSelected>>",
+            #     func=lambda _, cam_unique_id=cam.unique_id, robot=w_robot: self._on_attach_cam(
+            #         cam_unique_id, robot
+            #     ),
+            # )
 
             w_robot.set("-" if cam.robot is None else cam.robot.name)
         # remove the rest of the rows
@@ -223,7 +232,7 @@ class Overview(rl.Observer, tk.Frame):
 
     def _update_object_table(self) -> None:
         for i, obj in enumerate(self._scene.objects.values()):
-            kwargs_list = [
+            kwargs_list: list[dict[str, Any]] = [
                 {"text": obj.name},  # obj_name
                 {"bg": "#%02x%02x%02x" % tuple(obj.semantic_color)},  # w_color
                 {"text": "x", "command": lambda obj=obj: self._scene.remove_object(obj)},
@@ -245,41 +254,28 @@ class Overview(rl.Observer, tk.Frame):
         for i in range(len(self._scene.objects), len(self.object_list.rows)):
             self.object_list.pop(i)
 
-    @rl.as_async_task
-    async def _on_attach_cam(self, cam_unique_id, w_robot):
-        cam = self._scene.cameras[cam_unique_id]
+    def _on_attach_cam(self, *args: Any, cam_id: str, w_robot: ttk.Combobox) -> None:
+        cam = self._scene.cameras[cam_id]
 
         if w_robot.get() == "-":
             cam.detach()
         else:
             robot = self._scene.robots[w_robot.get()]
-            await cam.attach(robot)
+            cam.attach(robot)
 
-    def _on_camera_selection_changed(self):
+    def _on_camera_selection_changed(self) -> None:
         selected = self.camera_selection.get()
         self._scene.select_camera_by_id(selected)
 
-    def _on_object_selection_changed(self):
+    def _on_object_selection_changed(self) -> None:
         selected = self.object_selection.get()
         self._scene.select_object_by_name(selected)
 
-    @rl.as_async_task
-    async def _on_set_home(self, robot: rl.robot.Robot):
-        await robot.set_current_as_homepose()
-
-    async def live_preview(self):
-        self.t_previous_frame = time.perf_counter()
-        self.previous_dts = [1 / self.FPS] * 10
-        while True:
-            # framerate limiter
-            t = time.perf_counter()
-            if (t - self.t_previous_update) < 1 / self.FPS:
-                await asyncio.sleep(1 / self.FPS - (t - self.t_previous_update))
-            self.t_previous_update = time.perf_counter()
-
-            await self.show_single_frame()
-            # if we don't update the GUI in this loop, the FPS does not reflect the actual screen FPS
-            self.live_canvas.update()
+    async def _on_set_home(self, robot: rl.robot.Robot) -> None:
+        asyncio.get_event_loop().create_task(
+            robot.set_current_as_homepose(),
+            name="set_robot_home",
+        )
 
     async def update_live_preview(self) -> None:
         t = time.perf_counter()
@@ -289,7 +285,7 @@ class Overview(rl.Observer, tk.Frame):
         await self.show_single_frame()
         self.live_canvas.update()
 
-    async def show_single_frame(self):
+    async def show_single_frame(self) -> None:
         # draw FPS in top left cornere
         dt = time.perf_counter() - self.t_previous_frame
         self.t_previous_frame = time.perf_counter()
@@ -338,7 +334,7 @@ class Overview(rl.Observer, tk.Frame):
 
         self.live_canvas.set_image(preview)
 
-    def _color_depth(self, depth) -> np.ndarray:
+    def _color_depth(self, depth: np.ndarray) -> np.ndarray:
         return cv2.cvtColor(  # type: ignore
             cv2.applyColorMap(  # type: ignore
                 cv2.convertScaleAbs(depth, alpha=255 / 2.0), cv2.COLORMAP_JET  # type: ignore
@@ -346,7 +342,7 @@ class Overview(rl.Observer, tk.Frame):
             cv2.COLOR_BGR2RGB,  # type: ignore
         )
 
-    def _on_object_color_click(self, obj: rl.LabelledObject):
+    def _on_object_color_click(self, obj: rl.LabelledObject) -> None:
         colors = askcolor(title="Object Semantic Color")
-        obj.semantic_color = colors[0]
+        obj.semantic_color = np.array(colors[0])
         self._update_object_table()

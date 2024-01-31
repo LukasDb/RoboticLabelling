@@ -1,5 +1,5 @@
 from enum import Enum, auto
-from typing import Any, Set
+from typing import Any
 import logging
 
 
@@ -18,27 +18,29 @@ class Event(Enum):
 
 
 class Observable:
-    def __init__(self):
-        self.__observers: Set["Observer"] = set()
+    def __init__(self) -> None:
+        self.__observers: set["Observer"] = set()
 
-    def register(self, observer: "Observer"):
+    def register(self, observer: "Observer") -> None:
         self.__observers.add(observer)
 
-    def unregister(self, observer: "Observer"):
+    def unregister(self, observer: "Observer") -> None:
         self.__observers.remove(observer)
 
-    def notify(self, event: Event, *args, **kwargs):
+    def notify(self, event: Event, *args: Any, **kwargs: Any) -> None:
         logging.debug(f"[{self}]: {event}; {args}, {kwargs}")
         for observer in self.__observers:
             observer.update_observer(self, event, *args, **kwargs)
 
 
 class Observer:
-    def listen_to(self, subject: Observable):
+    def listen_to(self, subject: Observable) -> None:
         subject.register(self)
 
-    def stop_listening(self, subject: Observable):
+    def stop_listening(self, subject: Observable) -> None:
         subject.unregister(self)
 
-    def update_observer(self, subject: Observable, event: Event, *args, **kwargs):
+    def update_observer(
+        self, subject: Observable, event: Event, *args: Any, **kwargs: Any
+    ) -> None:
         pass

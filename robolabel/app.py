@@ -31,7 +31,7 @@ class App:
         self.t_last = time.perf_counter()
         self.FPS = 30
 
-    def populate_scene(self):
+    def populate_scene(self) -> None:
         ## --- Assemble scene ---
         # for testing
         mock_robot = rl.robot.MockRobot()
@@ -45,10 +45,10 @@ class App:
         for cam in rl.camera.Realsense.get_available_devices():
             self.scene.add_camera(cam)
 
-        #for cam in rl.camera.ZedCamera.get_available_devices():
+        # for cam in rl.camera.ZedCamera.get_available_devices():
         #    self.scene.add_camera(cam)
 
-    def assemble_gui(self):
+    def assemble_gui(self) -> None:
         self.menubar = tk.Menu(self.root)
         self.filemenu = tk.Menu(self.menubar, tearoff=0)
         # add save menu
@@ -97,7 +97,7 @@ class App:
         # register callback on tab change
         self.tabs.bind(sequence="<<NotebookTabChanged>>", func=lambda _: self._on_tab_change())
 
-    def _on_tab_change(self):
+    def _on_tab_change(self) -> None:
         open_tab = self.tabs.select()
         logging.debug(f"Tab changed to {open_tab}")
         if "viewposeregistration" in open_tab:
@@ -107,11 +107,11 @@ class App:
         elif "viewacquisition" in open_tab:
             self.scene.change_mode("acquisition")
 
-    def _on_close(self):
+    def _on_close(self) -> None:
         logging.warning("Closing app...")
         self.stop = True
 
-    def run(self):
+    def run(self) -> None:
         loop = asyncio.get_event_loop()
         state_path = Path("app_state.config")
         self.load_state(state_path)
@@ -124,7 +124,7 @@ class App:
         state_path = Path("app_state.config")
         self.save_state(state_path)
 
-    async def _tk_updater(self):
+    async def _tk_updater(self) -> None:
         while not self.stop:
             try:
                 self.root.update()
@@ -134,8 +134,7 @@ class App:
                 break
         logging.info("Tk loop finished.")
 
-    @rl.as_async_task
-    async def load_state(self, file: Path) -> None:
+    def load_state(self, file: Path) -> None:
         try:
             with Path(file).open("r") as f:
                 data = json.load(f)
@@ -143,7 +142,8 @@ class App:
             logging.warning(f"Could not load state from {file}")
             return
 
-        await self.calibrator.load(data["camera_calibration"])
+        self.calibrator.load(data["camera_calibration"])
+
         for obj_data in data["objects"]:
             obj = rl.LabelledObject(
                 obj_data["name"],
@@ -151,7 +151,7 @@ class App:
                 obj_data["semantic_color"],
             )
 
-            obj.pose = np.array(obj_data["pose"])
+            obj.set_pose(np.array(obj_data["pose"]))
 
             self.scene.add_object(obj)
 
@@ -160,15 +160,14 @@ class App:
                 continue
             self.scene.robots[name].home_pose = np.array(pose)
 
-    @rl.as_async_task
-    async def save_state(self, filepath: Path) -> None:
+    def save_state(self, filepath: Path) -> None:
         data = {
-            "camera_calibration": await self.calibrator.dump(),
+            "camera_calibration": self.calibrator.dump(),
             "objects": [
                 {
                     "name": name,
                     "mesh_path": str(obj.mesh_path),
-                    "pose": (await obj.pose).tolist(),
+                    "pose": (obj.get_pose()).tolist(),
                     "semantic_color": obj.semantic_color,
                 }
                 for name, obj in self.scene.objects.items()
@@ -182,7 +181,7 @@ class App:
         with filepath.open("w") as F:
             json.dump(data, F, indent=2)
 
-    def _on_load_config(self):
+    def _on_load_config(self) -> None:
         file = filedialog.askopenfilename(
             title="Select Configuration file",
             filetypes=(("configuration files", "*.config"), ("all files", "*.*")),
@@ -206,8 +205,7 @@ class App:
 
         self.save_state(filepath)
 
-    @rl.as_async_task
-    async def _on_add_object(self) -> None:
+    def _on_add_object(self) -> None:
         file = filedialog.askopenfilename(
             title="Select Object Ply file",
             filetypes=(("ply files", "*.ply"), ("all files", "*.*")),
@@ -225,6 +223,6 @@ class App:
                 i += 1
             obj_name = f"{obj_name}.{i:03}"
         new_object = rl.LabelledObject(obj_name, path)
-        monitor_pose = await self.scene.background.pose
-        new_object.pose = monitor_pose  # add this as initial position
+        monitor_pose = self.scene.background.get_pose()
+        new_object.set_pose(monitor_pose)  # add this as initial position
         self.scene.add_object(new_object)

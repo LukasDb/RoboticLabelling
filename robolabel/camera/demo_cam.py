@@ -8,7 +8,7 @@ from itertools import cycle
 import time
 import tkinter as tk
 from tkinter import ttk
-from robolabel.lib.geometry import invert_homogeneous, distance_from_matrices
+from robolabel.geometry import invert_homogeneous, distance_from_matrices
 
 
 class DemoCam(Camera):
@@ -17,7 +17,7 @@ class DemoCam(Camera):
     def __init__(self, unique_id: str):
         super().__init__("MockCam")
         self._unique_id = unique_id
-        self.data_folder = None
+        self.data_folder: str|None = None
         self.img_paths = None
         self.img_index = 0
         self.n_images = 0
@@ -56,13 +56,13 @@ class DemoCam(Camera):
 
         self._on_data_selected()
 
-    def _on_slider_change(self, value):
+    def _on_slider_change(self, value: float|int|str) -> None:
         self.img_index = int(value)
 
-    def _toggle_auto_play(self):
+    def _toggle_auto_play(self) -> None:
         self.auto_play = not self.auto_play
 
-    def _on_data_selected(self):
+    def _on_data_selected(self) -> None:
         # update indices for slider
         self.selectbox.configure(values=list(str(x) for x in Path("demo_data").iterdir()))
         self.data_folder = self.selectbox.get()
@@ -113,10 +113,10 @@ class DemoCam(Camera):
 
         # update mock robot pose
         if self.robot is not None:
-            self.robot.pose = robot_pose
+            self.robot.set_pose(robot_pose)
 
             # whenever we move the robot, choose a corresponding image
-            async def move_to_with_cb(pose, timeout):
+            async def move_to_with_cb(pose:np.ndarray, timeout:float) -> bool:
                 dists = {distance_from_matrices(pose, p): i for i, p in self.robot_poses.items()}
                 min_dist = np.min(list(dists.keys()))
                 closest = dists[min_dist]
@@ -126,7 +126,7 @@ class DemoCam(Camera):
                 logging.info(f"{self.name} would moved to pose: {pose[:3, 3]}")
                 return True
 
-            self.robot.move_to = move_to_with_cb
+            self.robot.move_to = move_to_with_cb # type: ignore
         return CamFrame(rgb=img, depth=depth)
 
     @property

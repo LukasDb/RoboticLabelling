@@ -46,6 +46,7 @@ class SettingsWidget(ttk.Frame):
     def create_entry_widget(self, master: tk.Misc, row: int, column: int, dtype: type) -> _RowType:
         """create a widget for a dataclass field"""
         var: _RowType
+        widget: tk.Widget
         if dtype is int:
             var = tk.StringVar()
             widget = ttk.Spinbox(master, from_=-1000, to=1000, textvariable=var)
@@ -72,7 +73,7 @@ class SettingsWidget(ttk.Frame):
         self.max_columns = max(self.max_columns, column + 1)
         return var
 
-    def set_from_instance(self, dataclass_instance):
+    def set_from_instance(self, dataclass_instance: Any) -> None:
         """set widget states from dataclass instance"""
         for k, v in dataclasses.asdict(dataclass_instance).items():
             if k.startswith("_"):
@@ -80,7 +81,7 @@ class SettingsWidget(ttk.Frame):
             else:
                 self._set_var(k, v)
 
-    def _set_var(self, name: str, value: Any):
+    def _set_var(self, name: str, value: Any) -> None:
         var = self.vars[name]
 
         if isinstance(var, tuple) or isinstance(var, list):
@@ -90,13 +91,13 @@ class SettingsWidget(ttk.Frame):
         else:
             var.set(value)
 
-    def get_instance(self):
+    def get_instance(self) -> Any:
         """get dataclass instance from widget states"""
         return self.dataclass(
             **{k.name: self._get_widget(k) for k in self.fields.values()}, **self._private_vars
         )
 
-    def _get_widget(self, field: dataclasses.Field[Any]):
+    def _get_widget(self, field: dataclasses.Field[Any]) -> Any:
         var = self.vars[field.name]
         if isinstance(var, tuple) or isinstance(var, list):
             return tuple(dtype(v.get()) for v, dtype in zip(var, field.type.__args__))
