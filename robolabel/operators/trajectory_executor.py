@@ -69,10 +69,7 @@ class TrajectoryExecutor:
             f"Executing trajectory with:\n\t- {cameras}\n\t- {bg_settings}\n\t- {lights_settings}"
         )
 
-        if robot.home_pose is None:
-            raise ValueError("Robot home pose is not set")
-
-        await robot.move_to(robot.home_pose, timeout=50)
+        home_pose = await robot.get_pose()
 
         logging.info("Reached home pose")
 
@@ -109,4 +106,4 @@ class TrajectoryExecutor:
 
                     yield idx_trajectory, cam
 
-        await robot.move_to(robot.home_pose, timeout=50)
+        await robot.move_to(home_pose, timeout=50)

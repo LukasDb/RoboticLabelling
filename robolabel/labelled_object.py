@@ -1,4 +1,5 @@
 import open3d as o3d
+import re
 from pathlib import Path
 import numpy as np
 
@@ -21,6 +22,10 @@ class LabelledObject(rl.Observable, rl.Entity):
             if semantic_color is None
             else semantic_color
         )
+        
+    @property
+    def cls(self) -> str:
+        return self.name.split('.')[0]
 
     @property
     def mesh(self) -> o3d.geometry.TriangleMesh:

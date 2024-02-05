@@ -6,6 +6,7 @@ from pathlib import Path
 from PIL import Image
 from dataclasses import dataclass
 import simpose as sp
+import cv2
 import contextlib
 
 
@@ -19,15 +20,21 @@ from robolabel.geometry import invert_homogeneous
 import robolabel as rl
 
 
+def _color_depth(depth: np.ndarray) -> np.ndarray:
+    return cv2.cvtColor(  # type: ignore
+        cv2.applyColorMap(  # type: ignore
+            cv2.convertScaleAbs(depth, alpha=255 / 2.0), cv2.COLORMAP_JET  # type: ignore
+        ),
+        cv2.COLOR_BGR2RGB,  # type: ignore
+    )
+
+
 @dataclass
 class AcquisitionSettings:
     is_dry_run: bool = False
     output_dir: str = "dataset"
-    occlusion_threshold: float = 0.03
+    occlusion_threshold: float = 0.02
     is_pre_acquisition: bool = False
-
-
-# TODO change everything for sp.Writer
 
 
 class DataAcquisition:
@@ -50,10 +57,9 @@ class DataAcquisition:
     ) -> None:
         trajectory = self.trajectory_generator.get_current_trajectory()
 
-        bg_monitor = self.scene.background
-        lights_controller = self.scene.lights
-
-        num_steps_per_camera = len(trajectory) * bg_settings.n_steps * lights_settings.n_steps
+        num_bg_steps = max(bg_settings.n_steps * bg_settings.use_backgrounds, 1)
+        num_light_steps = max(lights_settings.n_steps * lights_settings.use_lights, 1)
+        num_steps_per_camera = len(trajectory) * num_bg_steps * num_light_steps
 
         if acquisition_settings.is_pre_acquisition:
             # clear cache of HQ depths
@@ -61,9 +67,8 @@ class DataAcquisition:
             self.hq_depths_R.clear()
 
         if not acquisition_settings.is_pre_acquisition and not acquisition_settings.is_dry_run:
-            assert num_steps_per_camera == len(
-                self.hq_depths[active_cameras[0]]
-            ), f"Missing HQ depth, run pre-acquisition first"
+            hq_depths = self.hq_depths[active_cameras[0]]
+            assert len(trajectory) == len(hq_depths), "Missing pre-acquisition"
 
         writers: dict[rl.camera.Camera, sp.writers.Writer] = {}
         for cam in active_cameras:
@@ -103,8 +108,13 @@ class DataAcquisition:
                     hq_depth = frame.depth
                     hq_depth_R = frame.depth_R
 
-                    self.hq_depths.setdefault(cam, {})[idx_trajectory] = hq_depth
-                    self.hq_depths_R.setdefault(cam, {})[idx_trajectory] = hq_depth_R
+                    self.hq_depths.setdefault(cam, {})
+                    self.hq_depths[cam][idx_trajectory] = hq_depth
+
+                    self.hq_depths_R.setdefault(cam, {})
+                    self.hq_depths_R[cam][idx_trajectory] = hq_depth_R
+
+                    # self.hq_depths_R.setdefault(cam, {})[idx_trajectory] = hq_depth_R
                     continue
 
                 frame = cam.get_frame(depth_quality=rl.camera.DepthQuality.INFERENCE)
@@ -121,7 +131,7 @@ class DataAcquisition:
                 object_labels: list[sp.ObjectAnnotation] = []
                 visible_mask = np.zeros((cam.height, cam.width), dtype=np.uint8)
 
-                for object_id, obj in enumerate(active_objects):
+                for object_id, obj in enumerate(active_objects, start=1):
                     unoccluded_mask = await self.render_object_mask(obj, cam)
 
                     occluded_mask = await self.calculate_occluded_mask(
@@ -143,10 +153,10 @@ class DataAcquisition:
 
                     object_labels.append(
                         sp.ObjectAnnotation(
-                            cls="cls",
+                            cls=obj.cls,
                             object_id=object_id,
-                            position=obj.get_position(),
-                            quat_xyzw=obj.get_orientation().as_quat(canonical=True),
+                            position=tuple(obj.get_position()),
+                            quat_xyzw=tuple(obj.get_orientation().as_quat(canonical=True)),
                             bbox_visib=bbox_visib,
                             bbox_obj=bbox_obj,
                             px_count_visib=px_count_visib,
@@ -163,9 +173,9 @@ class DataAcquisition:
                     depth_R=frame.depth_R,
                     mask=visible_mask,
                     cam_position=cam_pos,
-                    cam_rotation=cam_rot.as_quat(),
+                    cam_quat_xyzw=cam_rot.as_quat(canonical=True),
                     intrinsics=cam.intrinsic_matrix,
-                    object_annotations=object_labels,
+                    objs=object_labels,
                 )
                 open_writers[cam].write_data(idx_trajectory, render_product=datapoint)
 
@@ -183,7 +193,10 @@ class DataAcquisition:
         """render object mask from camera"""
         scene, rays = await self.get_raycasting_scene(obj, cam)
         o3d_mask = scene.test_occlusions(rays).numpy()
-        return np.where(o3d_mask == True, 1, 0).astype(np.uint8)
+        mask = np.where(o3d_mask == True, 1, 0).astype(np.uint8)
+        # cv2.imshow("mask", mask * 255)
+        # cv2.waitKey(5)
+        return mask
 
     async def calculate_occluded_mask(
         self,
@@ -204,6 +217,16 @@ class DataAcquisition:
         occluded_mask = np.where(
             np.logical_and(diff < occlusion_threshold, unoccluded_mask == 1), 1, 0
         ).astype(np.uint8)
+
+        # color_observation = _color_depth(depth)
+        # color_rendered = _color_depth(rendered_depth)
+        # color_diff = _color_depth(diff)
+        # v1 = np.hstack((color_observation, color_rendered))
+        # v2 = np.hstack((color_diff, _color_depth(occluded_mask)))
+        # view = np.vstack((v1, v2))
+        # view = cv2.resize(view, (0, 0), fx=0.5, fy=0.5)
+        # cv2.imshow("occlusion", view)
+        # cv2.waitKey(5)
 
         return occluded_mask
 

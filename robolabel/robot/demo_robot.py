@@ -8,10 +8,6 @@ import time
 class MockRobot(Robot):
     def __init__(self) -> None:
         super().__init__(name="mock")
-        self.home_pose = np.eye(4)
-
-    async def set_current_as_homepose(self) -> None:
-        self.home_pose = await self.get_pose()
 
     async def stop(self) -> None:
         pass

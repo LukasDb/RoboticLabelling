@@ -10,13 +10,8 @@ class TargetNotReachedError(Exception):
 
 
 class Robot(AsyncEntity, ABC):
-    def __init__(self, name: str, home_pose: npt.NDArray[np.float64] | None = None) -> None:
+    def __init__(self, name: str) -> None:
         super().__init__(name)
-        self.home_pose = home_pose
-
-    @abstractmethod
-    async def set_current_as_homepose(self) -> None:
-        pass
 
     @abstractmethod
     async def move_to(self, pose: npt.NDArray[np.float64], timeout: float) -> bool:

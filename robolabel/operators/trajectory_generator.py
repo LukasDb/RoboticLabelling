@@ -13,7 +13,7 @@ class TrajectorySettings:
     n_steps: int = 20  # number of steps in the trajectory
     r_range: tuple[float, float] = (0.3, 0.6)  # min and max distance from center of objects
     z_cutoff: float = 0.4  # minimum height above the objects
-    reach_dist_cutoff: float = 0.3  # how much to reach "behind" the objects
+    reach_dist_cutoff: float = 0.2  # how much to reach "behind" the objects
     min_robot_dist: float = 0.5  # minimum distance to the robot
     view_jitter: float = 0.05  # how much to jitter the view direction in m as offset of the center
     roll_range: tuple[float, float] = (-180, 180)

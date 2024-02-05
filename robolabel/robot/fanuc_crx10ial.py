@@ -57,10 +57,6 @@ class FanucCRX10iAL(Robot):
 
         logging.debug(f"Answer: {req}")
 
-    async def set_current_as_homepose(self) -> None:
-        self.home_pose = await self.get_pose()
-        logging.info(f"Set robot {self.name}'s home pose to {self.home_pose[:3, 3]}")
-
     async def get_pose(self) -> np.ndarray:
         robot_http = "http://" + self.ROBOT_IP + "/KAREL/"
         url = robot_http + "remoteposition"

@@ -72,11 +72,11 @@ class PoseRegistration(rl.Observer):
         assert frame.depth is not None, "Camera must have a depth channel"
 
         datapoint = Datapoint(
-            rgb=frame.rgb,
-            depth=frame.depth,
-            pose=cam_pose,
-            intrinsics=self._scene.selected_camera.intrinsic_matrix,
-            dist_coeffs=self._scene.selected_camera.dist_coefficients,
+            rgb=frame.rgb.copy(),
+            depth=frame.depth.copy(),
+            pose=cam_pose.copy(),
+            intrinsics=self._scene.selected_camera.intrinsic_matrix.copy(),
+            dist_coeffs=self._scene.selected_camera.dist_coefficients.copy(),
         )
 
         self.datapoints.append(datapoint)
@@ -100,9 +100,7 @@ class PoseRegistration(rl.Observer):
 
         logging.debug("Starting acquisition for calibration...")
 
-        i = 0
-        async for _ in self.acquisition.execute([self._scene.selected_camera], trajectory):
-            i += 1
+        async for i, cam in self.acquisition.execute([self._scene.selected_camera], trajectory):
             logging.debug(f"Reached {i}/{len(trajectory)}")
             await self.capture()
             callback()

@@ -66,14 +66,6 @@ class App:
         self.calibrator = rl.operators.CameraCalibrator(self.scene)
         self.pose_registration = rl.operators.PoseRegistration(self.scene)
 
-        # home_robot_menu = tk.Menu(self.menubar, tearoff=0)
-        # for name, robot in self.scene.robots.items():
-        #     home_robot_menu.add_command(
-        #         label=f"Set {name} home pose",
-        #         command=lambda robot=robot: self._on_set_home(robot),
-        #     )
-        # self.menubar.add_cascade(label="Home Robot", menu=home_robot_menu)
-
         self.root.config(menu=self.menubar)
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
@@ -155,11 +147,6 @@ class App:
 
             self.scene.add_object(obj)
 
-        for name, pose in data["robots"].items():
-            if pose == "none":
-                continue
-            self.scene.robots[name].home_pose = np.array(pose)
-
     def save_state(self, filepath: Path) -> None:
         data = {
             "camera_calibration": self.calibrator.dump(),
@@ -172,10 +159,7 @@ class App:
                 }
                 for name, obj in self.scene.objects.items()
             ],
-            "robots": {
-                name: "none" if robot.home_pose is None else robot.home_pose.tolist()
-                for name, robot in self.scene.robots.items()
-            },
+            "robots": {name: "none" for name, robot in self.scene.robots.items()},
         }
         # with Path(file.name).open("w") as f:
         with filepath.open("w") as F:

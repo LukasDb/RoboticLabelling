@@ -58,7 +58,6 @@ class BackgroundMonitor(rl.Entity, Observer):
         self, subject: Observable, event: Event, *args: Any, **kwargs: Any
     ) -> None:
         if event == Event.CAMERA_SELECTED:
-            print(f"HEEERE: {kwargs['camera']}")
             self._is_demo_mode = isinstance(kwargs["camera"], rl.camera.DemoCam)
         return super().update_observer(subject, event, *args, **kwargs)
 

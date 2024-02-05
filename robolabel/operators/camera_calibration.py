@@ -43,7 +43,7 @@ class CameraCalibrator(rl.Observer):
         self.is_active = False
         self.calibration_datapoints: list[CalibrationDatapoint] = []
         self.mock_i = 0
-        self.camera: rl.camera.Camera | None = self._scene.selected_camera
+
         self.markers2monitor = np.eye(4)
         self.trajectory_generator = rl.operators.TrajectoryGenerator()
         self.acquisition = rl.operators.TrajectoryExecutor(scene)
@@ -71,7 +71,7 @@ class CameraCalibrator(rl.Observer):
                 self.reset()
             assert "camera" in kwargs
             assert isinstance(kwargs["camera"], rl.camera.Camera)
-            self.camera = kwargs["camera"]
+            # self.camera = kwargs["camera"]
             self.setup_charuco_board()
 
     def reset(self) -> None:
@@ -129,11 +129,10 @@ class CameraCalibrator(rl.Observer):
         logging.debug(f"Changed guess for background monitor to {self.initial_guess}")
 
     async def run_self_calibration(self) -> None:
-        assert self.camera is not None, "No camera selected"
-        assert hasattr(
-            self.camera, "run_self_calibration"
-        ), "Camera does not support self calibration"
-        assert self.camera.robot is not None, "Camera is not attached to a robot"
+        # assert hasattr(
+        #     self.camera, "run_self_calibration"
+        # ), "Camera does not support self calibration"
+        # assert self.camera.robot is not None, "Camera is not attached to a robot"
 
         target_position = self.initial_guess.copy()
         target_position[2] += 0.6  # 60cm above monitor
@@ -159,22 +158,21 @@ class CameraCalibrator(rl.Observer):
 
         self.camera.run_self_calibration()  # type: ignore
 
-    async def capture(self) -> None:
-        assert self.camera is not None, "No camera selected"
-        assert self.camera.robot is not None, "Camera is not attached to a robot"
+    async def capture(self, cam: rl.camera.Camera) -> None:
+        assert cam.robot is not None, "Camera is not attached to a robot"
 
         # since the depth is not used anyway
-        robot_pose = await self.camera.robot.get_pose()
-        frame = self.camera.get_frame(depth_quality=rl.camera.DepthQuality.FASTEST)
+        robot_pose = await cam.robot.get_pose()
+        frame = cam.get_frame(depth_quality=rl.camera.DepthQuality.FASTEST)
 
         assert frame.rgb is not None, "Could not retrieve RGB image"
         img = frame.rgb
 
         calibration_result = self._detect_charuco(img, robot_pose)
         self.calibration_datapoints.append(calibration_result)
+        logging.info(f"Captured image ({robot_pose[:3,3]}; {calibration_result.detected})")
 
     async def capture_images(self, cb: Callable | None = None) -> None:
-        assert self.camera is not None, "No camera selected"
         trajectory_settings = rl.operators.TrajectorySettings(
             n_steps=20, view_jitter=0.0, z_cutoff=0.5, r_range=(0.4, 0.6)
         )
@@ -183,14 +181,14 @@ class CameraCalibrator(rl.Observer):
         )
 
         logging.debug("Starting acquisition for calibration...")
+        selected_cam = self._scene.selected_camera
+        assert selected_cam is not None, "No camera selected"
 
-        i = 0
-        async for _ in self.acquisition.execute([self.camera], trajectory):
-            i += 1
+        async for i, cam in self.acquisition.execute([selected_cam], trajectory):
             logging.debug(f"Reached {i}/{len(trajectory)}")
             if cb is not None:
                 cb()
-            await self.capture()
+            await self.capture(cam)
 
         if cb is not None:
             cb()
@@ -200,7 +198,7 @@ class CameraCalibrator(rl.Observer):
             logging.error("Please setup charuco board first")
             return
 
-        if self.camera is None:
+        if self._scene.selected_camera is None:
             logging.error("No camera selected")
             return
 
@@ -213,7 +211,10 @@ class CameraCalibrator(rl.Observer):
 
         assert len(inter_corners) > 0, "No charuco corners detected"
 
-        image_size = (self.camera.height, self.camera.width)
+        image_size = (
+            self._scene.selected_camera.height,
+            self._scene.selected_camera.width,
+        )
 
         cameraMatrixInit = np.array(
             [
@@ -292,7 +293,9 @@ class CameraCalibrator(rl.Observer):
         self._scene.background.set_pose(world2markers @ self.markers2monitor)
 
         # set camera atttributes
-        self.camera.set_calibration(camera_matrix, dist_coefficients, extrinsic_matrix)
+        self._scene.selected_camera.set_calibration(
+            camera_matrix, dist_coefficients, extrinsic_matrix
+        )
 
     async def draw_on_preview(self, cam: rl.camera.Camera, rgb: np.ndarray) -> np.ndarray:
         if not self.is_active or cam.robot is None:
@@ -315,12 +318,13 @@ class CameraCalibrator(rl.Observer):
     def get_from_image_cache(self, index: int) -> np.ndarray | None:
         if index is None:
             return None
-        if self.camera is None:
+        cam = self._scene.selected_camera
+        if cam is None:
             return None
         cal_result: CalibrationDatapoint = self.calibration_datapoints[index]
 
-        if self.camera.extrinsic_matrix is not None:
-            world2cam = cal_result.robot_pose @ self.camera.extrinsic_matrix
+        if cam.extrinsic_matrix is not None:
+            world2cam = cal_result.robot_pose @ cam.extrinsic_matrix
             cam2monitor = invert_homogeneous(world2cam) @ self._scene.background.get_pose()
         else:
             cam2monitor = None
@@ -328,8 +332,8 @@ class CameraCalibrator(rl.Observer):
         img = self._draw_cal_result(
             cal_result,
             cam2monitor=cam2monitor,
-            intrinsics=self.camera.intrinsic_matrix,
-            dist_coeffs=self.camera.dist_coefficients,
+            intrinsics=cam.intrinsic_matrix,
+            dist_coeffs=cam.dist_coefficients,
         )
         return img
 
@@ -381,7 +385,11 @@ class CameraCalibrator(rl.Observer):
         chessboard_size = self.chessboard_size
         marker_size = self.marker_size
 
-        if isinstance(self.camera, rl.camera.DemoCam):
+        cam = self._scene.selected_camera
+        if cam is None:
+            return None
+
+        if isinstance(cam, rl.camera.DemoCam):
             # overwrite to old demo data
             chessboard_size = 0.0286
             marker_size = 0.023
